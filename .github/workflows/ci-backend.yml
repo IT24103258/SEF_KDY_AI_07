@@ -25,4 +25,4 @@ jobs:
 
       - name: Run Backend Tests
         working-directory: .
-        run: dotnet test ./backend/FixFlow.Tests/FixFlow.Tests.csproj --no-build
+        run: dotnet test ./backend/FixFlow.Tests/FixFlow.Tests.csproj 
