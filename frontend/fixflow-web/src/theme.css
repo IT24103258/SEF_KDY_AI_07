@@ -1,0 +1,523 @@
+/* =============================================================================
+   FixFlow AI — design tokens & shared UI classes
+   Palette: deep circuit-navy base with a cyan "flow" accent and a violet
+   accent for AI/agent workflow moments. Glass surfaces float over a soft
+   gradient-mesh backdrop instead of flat cards.
+   ============================================================================= */
+
+:root {
+  --font-display: 'Sora', 'Segoe UI', sans-serif;
+  --font-body: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+
+  --radius-sm: 10px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-pill: 999px;
+
+  --glass-blur: 18px;
+  --topbar-height: 68px;
+}
+
+:root[data-theme='light'] {
+  --bg-primary: #EEF2FA;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.78);
+
+  --text-primary: #101828;
+  --text-secondary: #5B6B85;
+
+  --border-color: rgba(16, 24, 40, 0.10);
+  --glass-bg: rgba(255, 255, 255, 0.55);
+  --glass-bg-strong: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.6);
+
+  --primary-color: #0C8C90;
+  --primary-hover: #0A7175;
+  --primary-light: #DFF4F3;
+  --accent-color: #6C5CE7;
+  --accent-light: #ECE9FD;
+
+  --danger-color: #E0434B;
+  --success-color: #16A34A;
+  --warning-color: #C2790B;
+
+  --shadow-sm: 0 1px 2px 0 rgb(16 24 40 / 0.06);
+  --shadow-md: 0 10px 30px -10px rgb(16 24 40 / 0.18);
+  --shadow-glow: 0 0 0 1px rgba(12, 140, 144, 0.12), 0 12px 28px -12px rgba(12, 140, 144, 0.35);
+
+  --mesh-a: #BFEFEC;
+  --mesh-b: #D9D3FB;
+  --mesh-c: #F4E7C9;
+}
+
+:root[data-theme='dark'] {
+  --bg-primary: #0A0F1C;
+  --bg-secondary: #101828;
+  --bg-card: rgba(22, 30, 48, 0.62);
+
+  --text-primary: #EEF3FF;
+  --text-secondary: #93A2C2;
+
+  --border-color: rgba(255, 255, 255, 0.09);
+  --glass-bg: rgba(255, 255, 255, 0.06);
+  --glass-bg-strong: rgba(20, 27, 44, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.14);
+
+  --primary-color: #2FD9CE;
+  --primary-hover: #58E4DB;
+  --primary-light: rgba(47, 217, 206, 0.14);
+  --accent-color: #9184FF;
+  --accent-light: rgba(145, 132, 255, 0.16);
+
+  --danger-color: #FF6B71;
+  --success-color: #4ADE80;
+  --warning-color: #FBBF24;
+
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
+  --shadow-md: 0 20px 40px -16px rgb(0 0 0 / 0.55);
+  --shadow-glow: 0 0 0 1px rgba(47, 217, 206, 0.18), 0 16px 40px -14px rgba(47, 217, 206, 0.35);
+
+  --mesh-a: #123B44;
+  --mesh-b: #241B4D;
+  --mesh-c: #0A0F1C;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body, #root {
+  min-height: 100%;
+}
+
+body {
+  font-family: var(--font-body);
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.5;
+  position: relative;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Fixed gradient-mesh backdrop that glass surfaces sit above */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    radial-gradient(38% 42% at 12% 8%, var(--mesh-a) 0%, transparent 70%),
+    radial-gradient(42% 46% at 88% 12%, var(--mesh-b) 0%, transparent 72%),
+    radial-gradient(55% 55% at 50% 100%, var(--mesh-c) 0%, transparent 75%);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+a {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+
+button {
+  cursor: pointer;
+  font-family: inherit;
+}
+
+::selection {
+  background: var(--primary-light);
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+/* ---------------------------------------------------------------------------
+   Glass primitives
+   ------------------------------------------------------------------------- */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border: 1px solid var(--glass-border);
+}
+
+.glass-strong {
+  background: var(--glass-bg-strong);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border: 1px solid var(--glass-border);
+}
+
+/* ---------------------------------------------------------------------------
+   Top navigation bar
+   ------------------------------------------------------------------------- */
+.ff-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  height: var(--topbar-height);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 1.5rem;
+  border-bottom: 1px solid var(--glass-border);
+}
+
+.ff-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.ff-brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+  color: #04141a;
+  box-shadow: var(--shadow-glow);
+  flex-shrink: 0;
+}
+
+.ff-brand-word {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.08rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.ff-brand-tag {
+  font-family: var(--font-body);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  padding: 2px 6px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-color);
+  color: var(--primary-color);
+}
+
+.ff-nav-links {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 1;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ff-nav-links::-webkit-scrollbar { display: none; }
+
+.ff-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 13px;
+  border-radius: var(--radius-pill);
+  font-size: 0.87rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.ff-nav-link:hover {
+  background: var(--glass-bg);
+  color: var(--text-primary);
+}
+
+.ff-nav-link.active {
+  background: var(--primary-light);
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.ff-nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.ff-icon-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.ff-icon-btn:hover { border-color: var(--primary-color); }
+
+.ff-user-chip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 5px 8px 5px 5px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--border-color);
+  background: var(--glass-bg);
+}
+
+.ff-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--accent-color), var(--primary-color));
+  color: #0b1220;
+  font-weight: 700;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.ff-mobile-toggle {
+  display: none;
+}
+
+.ff-mobile-panel {
+  display: none;
+}
+
+@media (max-width: 880px) {
+  .ff-nav-links { display: none; }
+  .ff-mobile-toggle { display: flex; }
+  .ff-mobile-panel.open {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    position: sticky;
+    top: var(--topbar-height);
+    z-index: 39;
+    padding: 10px;
+    border-bottom: 1px solid var(--glass-border);
+  }
+  .ff-mobile-panel .ff-nav-link { width: 100%; border-radius: var(--radius-sm); }
+}
+
+/* ---------------------------------------------------------------------------
+   Shared components (buttons, inputs, cards, badges)
+   ------------------------------------------------------------------------- */
+.ff-btn {
+  padding: 9px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  font-weight: 600;
+  font-size: 0.92rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, background-color 0.15s ease, opacity 0.15s ease;
+}
+.ff-btn:active { transform: translateY(1px); }
+.ff-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+.ff-btn-sm { padding: 6px 12px; font-size: 0.82rem; }
+.ff-btn-lg { padding: 12px 22px; font-size: 1rem; }
+
+.ff-btn-primary {
+  background: linear-gradient(135deg, var(--primary-color), var(--accent-color));
+  color: #04141a;
+  box-shadow: var(--shadow-glow);
+}
+.ff-btn-primary:hover { filter: brightness(1.06); }
+
+.ff-btn-secondary {
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+.ff-btn-secondary:hover { border-color: var(--primary-color); }
+
+.ff-btn-danger {
+  background: var(--danger-color);
+  color: #2a0a0c;
+}
+
+.ff-btn-success {
+  background: var(--success-color);
+  color: #062b12;
+}
+
+.ff-field {
+  margin-bottom: 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ff-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.ff-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.ff-input-icon {
+  position: absolute;
+  left: 13px;
+  color: var(--text-secondary);
+  display: flex;
+}
+
+.ff-input {
+  width: 100%;
+  padding: 11px 14px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  background: var(--glass-bg);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.ff-input::placeholder { color: var(--text-secondary); opacity: 0.7; }
+.ff-input:focus { border-color: var(--primary-color); box-shadow: 0 0 0 3px var(--primary-light); }
+.ff-input-has-icon { padding-left: 40px; }
+.ff-input-error { border-color: var(--danger-color); }
+
+.ff-error-text { color: var(--danger-color); font-size: 0.8rem; }
+
+.ff-card {
+  background: var(--bg-card);
+  backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(140%);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--glass-border);
+  padding: 1.35rem;
+  box-shadow: var(--shadow-sm);
+  margin-bottom: 1.1rem;
+}
+
+.ff-badge {
+  padding: 4px 11px;
+  border-radius: var(--radius-pill);
+  font-size: 0.74rem;
+  font-weight: 700;
+  display: inline-block;
+  border: 1px solid transparent;
+}
+
+.ff-empty {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  border: 1.5px dashed var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+/* ---------------------------------------------------------------------------
+   Login screen
+   ------------------------------------------------------------------------- */
+.ff-login-shell {
+  min-height: 100vh;
+  display: flex;
+  align-items: stretch;
+}
+
+.ff-login-form-col {
+  flex: 1 1 460px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem;
+  min-width: 320px;
+}
+
+.ff-login-art-col {
+  flex: 1.2 1 640px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem;
+  position: relative;
+  overflow: hidden;
+}
+
+@media (max-width: 900px) {
+  .ff-login-art-col { display: none; }
+}
+
+.ff-login-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 2.1rem;
+  border-radius: var(--radius-lg);
+}
+
+.ff-login-header {
+  margin-bottom: 1.6rem;
+}
+
+.ff-login-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 11px;
+  border-radius: var(--radius-pill);
+  background: var(--primary-light);
+  color: var(--primary-color);
+  font-size: 0.74rem;
+  font-weight: 700;
+  margin-bottom: 0.9rem;
+}
+
+.ff-login-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.ff-login-subtitle {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.ff-demo-box {
+  margin-top: 1.4rem;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--glass-bg);
+  border: 1px solid var(--border-color);
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.ff-demo-box strong { color: var(--text-primary); }
+
+.ff-alert {
+  padding: 11px 13px;
+  border-radius: var(--radius-sm);
+  background: rgba(224, 67, 75, 0.12);
+  color: var(--danger-color);
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+  border: 1px solid rgba(224, 67, 75, 0.25);
+}
