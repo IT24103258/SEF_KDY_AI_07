@@ -15,7 +15,7 @@ describe('Login Component', () => {
       </BrowserRouter>
     );
 
-    expect(screen.getByText(/FixFlow AI Sign In/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sign in to FixFlow/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Sign In/i })).toBeInTheDocument();
   });
 });
