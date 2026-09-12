@@ -24,4 +24,5 @@ jobs:
         run: dotnet build backend/FixFlow.Api/FixFlow.Api.csproj --no-restore
 
       - name: Run Backend Tests
-        run: dotnet test backend/FixFlow.Tests/FixFlow.Tests.csproj --no-build
+        working-directory: .
+        run: dotnet test ./backend/FixFlow.Tests/FixFlow.Tests.csproj --no-build
