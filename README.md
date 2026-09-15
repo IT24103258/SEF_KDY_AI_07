@@ -57,13 +57,25 @@ Install the following software before running the project:
 
 FixFlow AI uses **PostgreSQL** as its relational database.
 
-The database is managed locally using **PostgreSQL** and **pgAdmin 4**. Docker is not required.
+The database is managed locally using **PostgreSQL** and **pgAdmin 4**.
 
-### 1. Database Setup
-```bash
-docker-compose up -d
+### Step 1 — Install PostgreSQL
+
+Install PostgreSQL on your local machine.
+
+During installation, remember the following:
+
+- PostgreSQL username
+- PostgreSQL password
+- PostgreSQL port
+
+The default PostgreSQL port is:
+
+```text
+5432
+
 ```
-
+API Swagger Documentation available at: `http://localhost:5000/swagger`
 ### 2. Backend Web API (.NET 8)
 ```bash
 cd backend/FixFlow.Api
