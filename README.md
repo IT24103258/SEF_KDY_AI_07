@@ -75,7 +75,7 @@ The default PostgreSQL port is:
 5432
 
 ```
-API Swagger Documentation available at: `http://localhost:5000/swagger`
+
 ### 2. Backend Web API (.NET 8)
 ```bash
 cd backend/FixFlow.Api
