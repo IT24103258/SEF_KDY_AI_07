@@ -9,6 +9,7 @@ import {
   CheckSquare,
   BarChart3,
   Wrench,
+  UserCheck, // Import added for Technician Matching icon
   ClipboardList,
   Sun,
   Moon,
@@ -64,6 +65,12 @@ const navItems = [
     label: 'Reports',
     path: '/reports',
     icon: BarChart3,
+    roles: ADMIN_ROLES
+  },
+  {
+    label: 'Technician Matching',
+    path: '/assignments',
+    icon: UserCheck,
     roles: ADMIN_ROLES
   },
   {

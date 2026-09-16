@@ -38,12 +38,28 @@ class HomeScreen extends StatelessWidget {
                   child: Icon(Icons.person, color: Colors.white),
                 ),
                 title: Text(
-                  'Welcome, ${authProvider.user?.firstName ?? 'User'}!',
+                  'Welcome, ${authProvider.user?.firstName ?? 'Technician'}!',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                subtitle: Text('Role: ${authProvider.user?.role ?? 'Requester'}'),
+                subtitle: Text('Role: ${authProvider.user?.role ?? 'Technician'}'),
               ),
             ),
+            const SizedBox(height: 20),
+
+            // Technician Quick Access Card
+            Card(
+              color: const Color(0xFF2563EB).withOpacity(0.08),
+              child: ListTile(
+                leading: const Icon(Icons.build_circle, color: Color(0xFF2563EB), size: 36),
+                title: const Text('My Assigned Jobs', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('View and update assigned maintenance tasks'),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  Navigator.pushNamed(context, AppRouter.technicianHome);
+                },
+              ),
+            ),
+
             const SizedBox(height: 24),
             const Text(
               'Mobile Workflows Gateway',
@@ -75,4 +91,3 @@ class HomeScreen extends StatelessWidget {
     );
   }
 }
-

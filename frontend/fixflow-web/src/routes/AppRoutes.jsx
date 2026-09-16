@@ -24,6 +24,8 @@ import {
   NotFound
 } from '../pages/Pages';
 
+import TechnicianAssignment from '../pages/TechnicianAssignment';
+
 import { getHomePath } from '../utils/roleRoutes';
 
 /*
@@ -257,6 +259,15 @@ export const AppRoutes = () => {
             roles={['Technician']}
           >
             <TechnicianHome />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/assignments"
+        element={
+          <ProtectedRoute>
+            <TechnicianAssignment />
           </ProtectedRoute>
         }
       />

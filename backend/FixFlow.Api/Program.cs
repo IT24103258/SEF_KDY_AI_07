@@ -77,6 +77,7 @@ builder.Services.AddAuthorization();
 
 // HttpClient & External Distance Matrix Service Registration
 builder.Services.AddHttpClient<IDistanceMatrixService, ExternalDistanceMatrixService>();
+builder.Services.AddHttpClient<ITechnicianService, TechnicianService>();
 
 // Shared Infrastructure Services
 builder.Services.AddScoped<IAuthService, AuthService>();
@@ -89,6 +90,7 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IReportsService, ReportsService>();
 builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
+builder.Services.AddScoped<ITechnicianService, TechnicianService>();
 
 // Swagger / OpenAPI Configuration
 builder.Services.AddEndpointsApiExplorer();
