@@ -50,12 +50,12 @@ class HomeScreen extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 12),
-            Card(
+            const Card(
               child: Padding(
-                padding: const EdgeInsets.all(16.0),
+                padding: EdgeInsets.all(16.0),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                  children: [
                     Text(
                       'API Gateway Connection: Active',
                       style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green),

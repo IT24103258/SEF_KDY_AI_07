@@ -1,4 +1,4 @@
-# FixFlow AI — Intelligent Maintenance Request Management System
+# FixFlow AI — Intelligent Apartment Maintenance Management System
 
 > **SE3090 – Software Engineering Frameworks, Assignment 1 (2026)**  
 > **Faculty of Computing, Sri Lanka Institute of Information Technology (SLIIT)**
@@ -7,7 +7,7 @@
 
 ## 📌 Project Overview
 
-**FixFlow AI** is a comprehensive software engineering platform designed to modernize university campus maintenance management. It features automated AI-driven request intake, risk-based priority scoring, multi-criteria technician assignment, and conflict-free work order scheduling.
+**FixFlow AI** is a comprehensive software engineering platform designed to modernize residential apartment maintenance management for a single residential apartment complex. It features automated AI-driven request intake, risk-based priority scoring, multi-criteria technician assignment, and conflict-free work order scheduling across towers, floors, residential units, and common areas.
 
 ### Architecture Highlights
 

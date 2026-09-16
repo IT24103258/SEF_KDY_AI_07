@@ -9,7 +9,7 @@ app = FastAPI(
     version="1.0.0"
 )
 
-/*
+'''
 ================================================================================
 FIXFLOW SHARED FOUNDATION MULTI-AGENT ORCHESTRATOR
 ================================================================================
@@ -17,7 +17,7 @@ IMPORTANT FOR ALL 4 MEMBERS:
 Register your step execution in your designated section inside execute_workflow().
 Do NOT create separate orchestrator files.
 ================================================================================
-*/
+'''
 
 @app.get("/health")
 def health_check():

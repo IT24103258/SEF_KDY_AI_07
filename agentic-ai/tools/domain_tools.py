@@ -8,9 +8,9 @@ class GetAssetDetailsTool(BaseTool):
     def _run(self, asset_id: str = "", **kwargs) -> Dict[str, Any]:
         return {
             "asset_id": asset_id,
-            "name": "Main Server Room UPS",
+            "name": "Tower A Passenger Elevator",
             "criticality": "Critical",
-            "category": "Electrical"
+            "category": "Elevator/Lift"
         }
 
 class GetLocationDetailsTool(BaseTool):
@@ -20,8 +20,8 @@ class GetLocationDetailsTool(BaseTool):
     def _run(self, location_id: str = "", **kwargs) -> Dict[str, Any]:
         return {
             "location_id": location_id,
-            "building": "Block A",
-            "room": "Lab A201",
+            "building": "Tower A",
+            "room": "Unit 305",
             "latitude": 6.9147,
             "longitude": 79.9733
         }
@@ -57,7 +57,7 @@ class GetTechnicianSkillsTool(BaseTool):
     def _run(self, technician_id: str = "", **kwargs) -> Dict[str, Any]:
         return {
             "technician_id": technician_id,
-            "skills": ["High Voltage Electrical Systems", "HVAC Chiller Maintenance"]
+            "skills": ["Residential Electrical Systems", "HVAC & AC Maintenance"]
         }
 
 # Tool Registry for Allow-Listing

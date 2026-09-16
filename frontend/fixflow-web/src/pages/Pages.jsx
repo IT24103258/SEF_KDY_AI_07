@@ -21,7 +21,7 @@ export const Dashboard = () => {
     <div>
       <PageHeader
         title="System Dashboard"
-        description="Overview of campus maintenance activity & Agentic AI workflows"
+        description="Overview of apartment complex maintenance activity & Agentic AI workflows"
       />
 
       <div
@@ -191,8 +191,8 @@ export const Locations = () => {
   return (
     <div>
       <PageHeader
-        title="Campus Locations"
-        description="Registered buildings, floors & room locations"
+        title="Apartment Complex Locations"
+        description="Registered towers, floors, apartment units & common areas"
       />
 
       <Card>
@@ -278,8 +278,8 @@ export const Assets = () => {
   return (
     <div>
       <PageHeader
-        title="Campus Assets"
-        description="Equipment registry & criticality classification"
+        title="Complex Assets"
+        description="Apartment complex equipment registry & criticality classification"
       />
 
       <Card>

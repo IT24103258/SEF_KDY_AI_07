@@ -18,7 +18,7 @@ public static class DatabaseSeeder
                 new Role { Name = "Administrator", Description = "System administrator with full access" },
                 new Role { Name = "Manager", Description = "Operations manager with dispatch & approval rights" },
                 new Role { Name = "Technician", Description = "Field technician executing work orders" },
-                new Role { Name = "Requester", Description = "Campus staff or student submitting requests" }
+                new Role { Name = "Requester", Description = "Apartment resident or staff submitting requests" }
             };
             await context.Roles.AddRangeAsync(roles);
             await context.SaveChangesAsync();
@@ -41,7 +41,7 @@ public static class DatabaseSeeder
             {
                 Email = "admin@fixflow.local",
                 PasswordHash = defaultPasswordHash,
-                FirstName = "System",
+                FirstName = "Property",
                 LastName = "Administrator",
                 PhoneNumber = "+94770000001",
                 RoleId = adminRole.Id
@@ -51,7 +51,7 @@ public static class DatabaseSeeder
             {
                 Email = "manager@fixflow.local",
                 PasswordHash = managerPasswordHash,
-                FirstName = "Operations",
+                FirstName = "Property",
                 LastName = "Manager",
                 PhoneNumber = "+94770000002",
                 RoleId = managerRole.Id
@@ -61,7 +61,7 @@ public static class DatabaseSeeder
             {
                 Email = "tech@fixflow.local",
                 PasswordHash = techPasswordHash,
-                FirstName = "Senior",
+                FirstName = "Maintenance",
                 LastName = "Technician",
                 PhoneNumber = "+94770000003",
                 RoleId = techRole.Id
@@ -71,8 +71,8 @@ public static class DatabaseSeeder
             {
                 Email = "requester@fixflow.local",
                 PasswordHash = reqPasswordHash,
-                FirstName = "Campus",
-                LastName = "Requester",
+                FirstName = "Apartment",
+                LastName = "Resident",
                 PhoneNumber = "+94770000004",
                 RoleId = requesterRole.Id
             };
@@ -94,27 +94,35 @@ public static class DatabaseSeeder
             await context.SaveChangesAsync();
         }
 
-        // 3. Campus Locations Seeding
+        // 3. Apartment Complex Locations Seeding (Single Complex Hierarchy)
         if (!await context.Locations.AnyAsync())
         {
             var locations = new List<Location>
             {
-                new Location { Name = "Main Computing Building", Building = "Block A", Floor = "2nd Floor", Room = "Lab A201", Latitude = 6.9147, Longitude = 79.9733 },
-                new Location { Name = "Engineering Complex", Building = "Block B", Floor = "1st Floor", Room = "Workshop B105", Latitude = 6.9150, Longitude = 79.9740 },
-                new Location { Name = "Central Library", Building = "Library Tower", Floor = "Ground Floor", Room = "Study Area", Latitude = 6.9142, Longitude = 79.9728 }
+                new Location { Name = "Tower A - Unit 305", Building = "Tower A", Floor = "Floor 3", Room = "Unit 305 - Bathroom", Latitude = 6.9147, Longitude = 79.9733 },
+                new Location { Name = "Tower A - Unit 204", Building = "Tower A", Floor = "Floor 2", Room = "Unit 204 - Kitchen", Latitude = 6.9147, Longitude = 79.9733 },
+                new Location { Name = "Tower B - Lobby", Building = "Tower B", Floor = "Floor 1", Room = "Common Area - Lobby", Latitude = 6.9150, Longitude = 79.9740 },
+                new Location { Name = "Tower B - Floor 2 Corridor", Building = "Tower B", Floor = "Floor 2", Room = "Common Area - Corridor", Latitude = 6.9150, Longitude = 79.9740 },
+                new Location { Name = "Common Area - Pool", Building = "Common Areas", Floor = "Ground Floor", Room = "Pool & Pump House", Latitude = 6.9142, Longitude = 79.9728 },
+                new Location { Name = "Common Area - Parking", Building = "Common Areas", Floor = "Basement", Room = "Parking Area B1", Latitude = 6.9142, Longitude = 79.9728 }
             };
             await context.Locations.AddRangeAsync(locations);
             await context.SaveChangesAsync();
         }
 
-        // 4. Campus Assets Seeding
+        // 4. Apartment Complex Assets Seeding
         if (!await context.Assets.AnyAsync())
         {
-            var locA = await context.Locations.FirstAsync(l => l.Building == "Block A");
+            var locTowerA = await context.Locations.FirstAsync(l => l.Building == "Tower A");
+            var locTowerB = await context.Locations.FirstAsync(l => l.Building == "Tower B");
+            var locCommon = await context.Locations.FirstAsync(l => l.Building == "Common Areas");
+
             var assets = new List<Asset>
             {
-                new Asset { Name = "Central HVAC Chiller A1", AssetCode = "HVAC-BLKA-01", Category = "HVAC", Criticality = "High", LocationId = locA.Id },
-                new Asset { Name = "Main Server Room UPS", AssetCode = "PWR-BLKA-02", Category = "Electrical", Criticality = "Critical", LocationId = locA.Id }
+                new Asset { Name = "Tower A Passenger Elevator", AssetCode = "ELEV-TWRA-01", Category = "Elevator/Lift", Criticality = "Critical", LocationId = locTowerA.Id },
+                new Asset { Name = "Tower B Lobby Air Conditioner", AssetCode = "HVAC-TWRB-01", Category = "HVAC", Criticality = "Medium", LocationId = locTowerB.Id },
+                new Asset { Name = "Main Water Booster Pump System", AssetCode = "PUMP-CMN-01", Category = "Water Supply", Criticality = "High", LocationId = locCommon.Id },
+                new Asset { Name = "Backup Diesel Generator", AssetCode = "PWR-GEN-01", Category = "Electrical", Criticality = "Critical", LocationId = locCommon.Id }
             };
             await context.Assets.AddRangeAsync(assets);
             await context.SaveChangesAsync();
@@ -125,10 +133,13 @@ public static class DatabaseSeeder
         {
             var categories = new List<IssueCategory>
             {
-                new IssueCategory { Name = "Electrical Breakdown", Description = "Power outages, short circuits, light failures", DefaultPriority = "High" },
-                new IssueCategory { Name = "HVAC & Air Conditioning", Description = "AC cooling failures, ventilation issues", DefaultPriority = "Medium" },
-                new IssueCategory { Name = "Plumbing & Water", Description = "Pipe leaks, drainage blockages, tap faults", DefaultPriority = "Medium" },
-                new IssueCategory { Name = "Structural & Furniture", Description = "Broken doors, windows, desks, chairs", DefaultPriority = "Low" }
+                new IssueCategory { Name = "Electrical", Description = "Power outages, short circuits, lighting failures, panel issues", DefaultPriority = "High" },
+                new IssueCategory { Name = "HVAC", Description = "Air conditioning cooling failures, ventilation issues, thermostat faults", DefaultPriority = "Medium" },
+                new IssueCategory { Name = "Plumbing", Description = "Pipe leaks, drainage blockages, tap faults, water pressure issues", DefaultPriority = "Medium" },
+                new IssueCategory { Name = "Elevator/Lift", Description = "Elevator stoppage, abnormal noises, door sensor faults", DefaultPriority = "Critical" },
+                new IssueCategory { Name = "Water Supply", Description = "Water pump malfunction, tank overflow, pressure drops", DefaultPriority = "High" },
+                new IssueCategory { Name = "Common Area", Description = "Corridor lights, gym equipment, pool maintenance, parking gate", DefaultPriority = "Low" },
+                new IssueCategory { Name = "Structural", Description = "Broken doors, windows, locks, ceiling cracks, wall damage", DefaultPriority = "Low" }
             };
             await context.IssueCategories.AddRangeAsync(categories);
             await context.SaveChangesAsync();
@@ -139,9 +150,10 @@ public static class DatabaseSeeder
         {
             var skills = new List<Skill>
             {
-                new Skill { Name = "High Voltage Electrical Systems", Category = "Electrical" },
-                new Skill { Name = "HVAC Chiller Maintenance", Category = "HVAC" },
-                new Skill { Name = "Commercial Plumbing Repair", Category = "Plumbing" }
+                new Skill { Name = "Residential Electrical Systems", Category = "Electrical" },
+                new Skill { Name = "HVAC & AC Maintenance", Category = "HVAC" },
+                new Skill { Name = "Residential Plumbing & Drainage Repair", Category = "Plumbing" },
+                new Skill { Name = "Elevator & Lift Maintenance", Category = "Elevator/Lift" }
             };
             await context.Skills.AddRangeAsync(skills);
             await context.SaveChangesAsync();
@@ -164,16 +176,16 @@ public static class DatabaseSeeder
         // 8. Sample Maintenance Request for Initial Workflow Demonstration
         if (!await context.MaintenanceRequests.AnyAsync())
         {
-            var loc = await context.Locations.FirstAsync();
-            var asset = await context.Assets.FirstAsync();
+            var loc = await context.Locations.FirstAsync(l => l.Building == "Tower A");
+            var asset = await context.Assets.FirstAsync(a => a.Category == "HVAC");
             var reqUser = await context.Users.FirstAsync(u => u.Email == "requester@fixflow.local");
-            var cat = await context.IssueCategories.FirstAsync();
+            var cat = await context.IssueCategories.FirstAsync(c => c.Name == "HVAC");
 
             var sampleRequest = new MaintenanceRequest
             {
                 RequestNumber = "REQ-2026-0001",
-                Title = "Server Room AC Cooling Failure",
-                Description = "The primary AC unit in Lab A201 is making loud abnormal noises and temperature is rising.",
+                Title = "The AC in the Tower A lobby isn't cooling",
+                Description = "The main AC unit in the Tower A lobby is not cooling properly and is making an unusual rattling noise.",
                 Status = RequestStatus.Submitted,
                 LocationId = loc.Id,
                 AssetId = asset.Id,

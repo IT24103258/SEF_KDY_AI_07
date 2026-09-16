@@ -18,8 +18,8 @@ class ClassificationAgent(BaseAgent):
         tool_log = self.execute_tool("get_issue_category_rules", category_name=input_context.get("title", ""))
         
         output = {
-            "category": "Electrical Breakdown",
-            "subcategory": "HVAC Chiller Power Supply",
+            "category": "HVAC",
+            "subcategory": "Lobby AC Cooling Failure",
             "confidence_score": 0.92,
             "requires_review": False
         }

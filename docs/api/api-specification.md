@@ -7,7 +7,7 @@
 
 ## Infrastructure Endpoints
 - `GET /api/health`: Health status of database and external connections.
-- `GET /api/locations`: Returns campus locations.
+- `GET /api/locations`: Returns apartment complex locations (towers, floors, units, common areas).
 - `POST /api/locations`: Creates a new location.
 - `GET /api/assets`: Returns assets list.
 - `POST /api/assets`: Registers an asset.

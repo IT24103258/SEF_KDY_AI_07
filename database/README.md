@@ -19,7 +19,7 @@ FixFlow AI uses PostgreSQL 16 managed strictly through Entity Framework Core (EF
 ## Shared Foundation Entities
 - `BaseEntity` (Id, CreatedAt, UpdatedAt, IsDeleted)
 - `User` & `Role` (Authentication & RBAC)
-- `Location` & `Asset` (Campus infrastructure mapping)
+- `Location` & `Asset` (Apartment complex infrastructure mapping: towers, floors, units, common areas)
 - `MaintenanceRequest` & `IssueCategory` (Intake context)
 - `Technician` & `Skill` (Resource capabilities)
 - `Notification` (Alerts)
