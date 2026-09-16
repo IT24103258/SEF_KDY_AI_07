@@ -19,7 +19,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // DbContext Registration (PostgreSQL / In-Memory Fallback for test execution)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") 
-                       ?? "Host=localhost;Port=5432;Database=fixflow_db;Username=fixflow_admin;Password=fixflow_secure_password_2026;";
+                       ?? "Host=localhost;Port=5432;Database=fixflow_db;Username=postgres;Password=12345;";
 
 builder.Services.AddDbContext<FixFlowDbContext>(options =>
     options.UseNpgsql(connectionString));
