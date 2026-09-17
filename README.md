@@ -30,7 +30,7 @@ Every team member has technical ownership across backend, database, web, mobile,
 | Member | Business Component | Domain Focus | Feature Branch |
 | :--- | :--- | :--- | :--- |
 | **Member 1** | Request Intake & Classification | Issue classification, symptom capture, evidence tagging | `member-1/request-intake` |
-| **Member 2** | Risk & Priority Assessment | SLA evaluation, hazard indicator, priority matrix | `member-2/priority` |
+| **Member 2** | Risk & Priority Assessment | Risk assessment, asset criticality, impact & likelihood evaluation, risk matrix & scoring, risk level, priority, SLA, escalation, and risk simulation | `member-2/priority` |
 | **Member 3** | Technician Matching & Assignment | Skill matching, workload analysis, candidate ranking | `member-3/assignment` |
 | **Member 4** | Scheduling & Work Order Management | Calendar booking, time-slot validation, status tracking | `member-4/scheduling` |
 

@@ -60,7 +60,12 @@ def execute_workflow(request: WorkflowExecutionRequest):
     assignment_agent = AssignmentAgent()
     step3_result = assignment_agent.run_step({
         "request_id": request.request_id,
-        "priority": step2_result.output_data.get("priority_level")
+        "priority": step2_result.output_data.get("priority") or step2_result.output_data.get("priority_level"),
+        "risk_level": step2_result.output_data.get("risk_level"),
+        "risk_score": step2_result.output_data.get("risk_score"),
+        "sla": step2_result.output_data.get("sla"),
+        "target_sla_hours": step2_result.output_data.get("target_sla_hours"),
+        "recommended_response_window": step2_result.output_data.get("recommended_response_window")
     })
     steps.append(step3_result)
 

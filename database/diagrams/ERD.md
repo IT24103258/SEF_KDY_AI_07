@@ -21,6 +21,7 @@ erDiagram
     User ||--o{ AuditLog : "performed by"
     
     SLAConfiguration ||--o{ IssueCategory : "applies to"
+    MaintenanceRequest ||--o| PriorityAssessment : "assessed by"
 
     User {
         uuid Id PK
@@ -111,5 +112,21 @@ erDiagram
         uuid ApproverId FK
         string Status
         string Comments
+    }
+
+    PriorityAssessment {
+        uuid Id PK
+        uuid RequestId FK
+        string AssetCriticality
+        string ImpactLevel
+        string LikelihoodLevel
+        integer RiskScore
+        string RiskLevel
+        string Priority
+        string RecommendedResponseWindow
+        string SlaJson
+        boolean EscalationFlag
+        string Explanation
+        datetime AssessedAt
     }
 ```

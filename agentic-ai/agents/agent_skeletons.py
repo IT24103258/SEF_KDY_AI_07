@@ -37,18 +37,42 @@ class ClassificationAgent(BaseAgent):
         )
 
 class PriorityAgent(BaseAgent):
+    """
+    Risk & Priority Assessment Agent (Component 2)
+    Assesses asset criticality, impact, likelihood, risk score, risk matrix level,
+    priority, SLA targets, escalation flags, and provides risk explanations.
+    """
     def __init__(self):
         tools = [
-            ALLOW_LISTED_TOOLS["get_asset_details"],
-            ALLOW_LISTED_TOOLS["get_sla_config"]
+            ALLOW_LISTED_TOOLS["get_asset_criticality"],
+            ALLOW_LISTED_TOOLS["get_location_risk_rules"],
+            ALLOW_LISTED_TOOLS["get_open_requests_for_asset"],
+            ALLOW_LISTED_TOOLS["get_sla_config"],
+            ALLOW_LISTED_TOOLS["get_risk_matrix_rules"],
+            ALLOW_LISTED_TOOLS["get_historical_risk_data"],
+            ALLOW_LISTED_TOOLS["save_risk_assessment"],
+            ALLOW_LISTED_TOOLS["save_priority_assessment"]
         ]
         super().__init__("PriorityAgent", tools)
 
     def run_step(self, input_context: Dict[str, Any]) -> StepExecutionResult:
-        tool_log = self.execute_tool("get_sla_config", priority_level="High")
+        tool_log = self.execute_tool("get_risk_matrix_rules", impact="High", likelihood="Medium")
         
         output = {
+            "asset_criticality": "Critical",
+            "impact_level": "High",
+            "likelihood_level": "Medium",
             "risk_score": 85,
+            "risk_level": "High",
+            "priority": "High",
+            "recommended_response_window": "Within 2-4 hours",
+            "sla": {
+                "response_hours": 2,
+                "resolution_hours": 8
+            },
+            "escalation_flag": False,
+            "explanation": "High operational impact on critical elevator asset with moderate recurrence likelihood.",
+            # Backward compatibility fields
             "priority_level": "High",
             "target_sla_hours": 8,
             "hazard_flag": False
@@ -59,7 +83,7 @@ class PriorityAgent(BaseAgent):
 
         return StepExecutionResult(
             agent_name=self.name,
-            step_name="Risk & Priority Scoring",
+            step_name="Risk & Priority Assessment",
             status="REQUIRES_HUMAN_APPROVAL" if requires_human else "SUCCESS",
             output_data=output,
             validation_passed=is_valid,

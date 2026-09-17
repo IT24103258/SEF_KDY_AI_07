@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 
 # Member 1 Schema
 class ClassificationOutput(BaseModel):
@@ -8,12 +8,22 @@ class ClassificationOutput(BaseModel):
     confidence_score: float = Field(..., ge=0.0, le=1.0)
     requires_review: bool = False
 
-# Member 2 Schema
+# Member 2 Schema - Risk & Priority Assessment
 class PriorityOutput(BaseModel):
+    asset_criticality: str = "Medium"
+    impact_level: str = "Medium"
+    likelihood_level: str = "Medium"
     risk_score: int = Field(..., ge=1, le=100)
-    priority_level: str # Low, Medium, High, Critical
-    target_sla_hours: int
-    hazard_flag: bool = False
+    risk_level: str # Low, Medium, High, Critical
+    priority: str # Low, Medium, High, Critical
+    recommended_response_window: str = "Within 4 hours"
+    sla: Dict[str, Any] = Field(default_factory=dict)
+    escalation_flag: bool = False
+    explanation: str = ""
+    # Backward compatibility fields
+    priority_level: Optional[str] = None
+    target_sla_hours: Optional[int] = None
+    hazard_flag: Optional[bool] = False
 
 # Member 3 Schema
 class TechnicianCandidate(BaseModel):

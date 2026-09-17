@@ -27,6 +27,32 @@ graph TD
 
 ---
 
+## Agent Workflow Pipeline
+
+The internal Python Agentic AI service processes maintenance workflows through a sequential pipeline:
+
+```mermaid
+flowchart TD
+    Classification["Classification Agent (Member 1)"] --> Priority["Risk & Priority Agent (Member 2)"]
+    Priority --> DeterministicVal["Deterministic Risk/Business Validation"]
+    DeterministicVal --> Assignment["Assignment Agent (Member 3)"]
+    Assignment --> Scheduling["Scheduling Agent (Member 4)"]
+    Scheduling --> HumanApproval{"Human Approval Required?"}
+    HumanApproval -->|Yes: Critical Risk / Low Conf| ManagerReview["Manager Approval Dashboard"]
+    HumanApproval -->|No| FinalExecution["Final Execution & Dispatch via ASP.NET Core"]
+    ManagerReview -->|Approved| FinalExecution
+```
+
+1. **Classification Agent** (Member 1) — Request intake, issue classification, confidence scoring.
+2. **Risk & Priority Agent** (Member 2) — Asset criticality, impact and likelihood assessment, risk matrix score, risk level, priority, SLA response window, escalation flag, and explanation.
+3. **Deterministic Risk/Business Validation** — Deterministic safety overrides, schema enforcement, and human approval threshold checks.
+4. **Assignment Agent** (Member 3) — Technician skill matching and candidate ranking.
+5. **Scheduling Agent** (Member 4) — Conflict-free schedule proposal.
+6. **Human Approval where required** — Manager sign-off for critical risk levels or safety hazard flags.
+7. **Final execution** — Work order dispatch and persistence via ASP.NET Core Web API.
+
+---
+
 ## Shared Foundation Design Patterns
 - **Layered Architecture**: Controllers $\rightarrow$ Services $\rightarrow$ EF Core DbContext $\rightarrow$ PostgreSQL.
 - **Convention-Based Assembly Discovery**: DbContext uses `ApplyConfigurationsFromAssembly` so student entity configurations are automatically picked up without touching shared files.

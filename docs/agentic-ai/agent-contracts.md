@@ -7,10 +7,10 @@
 - **Output**: Category, subcategory, confidence score (0.0 - 1.0), reasoning tag.
 - **Allowed Tools**: `get_asset_details`, `get_location_details`, `get_issue_category_rules`.
 
-### 2. Priority Agent (Member 2)
-- **Input**: Maintenance request details, classification result, impact scope.
-- **Output**: Risk score (1–100), Priority Level (`Low`, `Medium`, `High`, `Critical`), Target SLA hours.
-- **Allowed Tools**: `get_asset_criticality`, `get_location_risk_rules`, `get_sla_config`.
+### 2. Priority Agent (Member 2) — Risk & Priority Assessment
+- **Input**: Classified issue, asset, location, symptoms, safety indicators, operational impact, likelihood indicators, historical recurrence, request time.
+- **Output**: Asset criticality, impact level, likelihood level, risk score (1–100), risk level (`Low`, `Medium`, `High`, `Critical`), priority (`Low`, `Medium`, `High`, `Critical`), recommended response window, SLA targets, escalation flag, explanation.
+- **Allowed Tools**: `GetAssetCriticality`, `GetLocationRiskRules`, `GetOpenRequestsForAsset`, `GetSLAConfig`, `GetRiskMatrixRules`, `GetHistoricalRiskData`, `SaveRiskAssessment`, `SavePriorityAssessment`.
 
 ### 3. Assignment Agent (Member 3)
 - **Input**: Request ID, priority level, location coordinates, required skills.
