@@ -14,7 +14,8 @@ import {
   Moon,
   LogOut,
   Menu,
-  X
+  X,
+  ShieldAlert
 } from 'lucide-react';
 
 import { useAuth } from '../hooks';
@@ -52,6 +53,12 @@ const navItems = [
     label: 'Workflows',
     path: '/workflows',
     icon: Workflow,
+    roles: ADMIN_ROLES
+  },
+  {
+    label: 'Risk & Priority',
+    path: '/priorities',
+    icon: ShieldAlert,
     roles: ADMIN_ROLES
   },
   {

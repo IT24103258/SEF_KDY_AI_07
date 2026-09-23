@@ -1,9 +1,52 @@
+import re
 from pydantic import BaseModel, ValidationError
-from typing import Type, Tuple, Dict, Any, Optional
+from typing import Type, Tuple, Dict, Any, Optional, List
 
 class DeterministicValidator:
     VALID_RISK_LEVELS = {"Low", "Medium", "High", "Critical"}
     VALID_PRIORITY_LEVELS = {"Low", "Medium", "High", "Critical"}
+
+    INJECTION_PATTERNS = [
+        r"ignore\s+(all\s+)?(previous|above|system)\s+(instructions|rules|prompts)",
+        r"disregard\s+(the\s+)?(risk|safety|priority)\s+(rules|guidelines|calculations)",
+        r"mark\s+(this\s+)?(as\s+)?(low|minimal|zero|safe)",
+        r"set\s+(the\s+)?(risk|priority)\s+(to\s+)?(low|zero)",
+        r"system\s+override",
+        r"jailbreak",
+        r"you\s+are\s+now\s+(in\s+)?(maintenance\s+)?debug\s+mode",
+        r"do\s+not\s+(escalate|flag|alert)",
+        r"downgrade\s+(this\s+)?(priority|risk)"
+    ]
+
+    @staticmethod
+    def detect_prompt_injection(text: str) -> Tuple[bool, List[str]]:
+        """
+        Scans untrusted input text for prompt injection attempts.
+        Returns: (is_injection_detected, matched_patterns)
+        """
+        if not text:
+            return False, []
+
+        matches = []
+        for pattern in DeterministicValidator.INJECTION_PATTERNS:
+            if re.search(pattern, text, re.IGNORECASE):
+                matches.append(pattern)
+
+        return len(matches) > 0, matches
+
+    @staticmethod
+    def sanitize_untrusted_input(text: str) -> str:
+        """
+        Strips suspected prompt injection patterns from user text while preserving legitimate context.
+        """
+        if not text:
+            return ""
+
+        sanitized = text
+        for pattern in DeterministicValidator.INJECTION_PATTERNS:
+            sanitized = re.sub(pattern, "[FILTERED_INJECTION_ATTEMPT]", sanitized, flags=re.IGNORECASE)
+
+        return sanitized.strip()
 
     @staticmethod
     def validate_schema(data: Dict[str, Any], schema_cls: Type[BaseModel]) -> Tuple[bool, Any, str]:

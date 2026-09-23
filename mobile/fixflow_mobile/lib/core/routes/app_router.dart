@@ -3,6 +3,7 @@ import '../../screens/login_screen.dart';
 import '../../screens/home_screen.dart';
 import '../../screens/profile_screen.dart';
 import '../../screens/notifications_screen.dart';
+import '../../screens/priority_details_screen.dart';
 
 /*
 ================================================================================
@@ -32,7 +33,7 @@ class AppRouter {
   // ============================================================
   // MEMBER 2 ROUTE CONSTANTS — RISK & PRIORITY ASSESSMENT
   // ============================================================
-  // Example: static const String priorityDetails = '/priority-details';
+  static const String priorityDetails = '/priority-details';
 
 
   // ============================================================
@@ -69,8 +70,8 @@ class AppRouter {
       // ============================================================
       // MEMBER 2 ROUTE CASES — RISK & PRIORITY ASSESSMENT
       // ============================================================
-      // case priorityDetails:
-      //   return MaterialPageRoute(builder: (_) => const PriorityDetailsScreen());
+      case priorityDetails:
+        return MaterialPageRoute(builder: (_) => const PriorityDetailsScreen());
 
 
       // ============================================================
