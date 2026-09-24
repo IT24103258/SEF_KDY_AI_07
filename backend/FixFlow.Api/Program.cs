@@ -140,7 +140,8 @@ builder.Services.AddSwaggerGen(c =>
 // MEMBER 4 — SCHEDULING & WORK ORDER MANAGEMENT
 // ADD YOUR DI REGISTRATIONS ONLY IN THIS SECTION
 // ============================================================
-// Example: builder.Services.AddScoped<ISchedulingService, SchedulingService>();
+builder.Services.AddScoped<ISchedulingService, SchedulingService>();
+builder.Services.AddScoped<IWorkOrderService, WorkOrderService>();
 
 
 // ============================================================
