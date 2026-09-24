@@ -157,7 +157,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
           // Selector dropdown if multiple
           if (_assessments.length > 1) ...[
             DropdownButtonFormField<PriorityAssessmentModel>(
-              initialValue: item,
+              value: item,
               decoration: const InputDecoration(
                 labelText: 'Select Maintenance Request',
                 border: OutlineInputBorder(),
@@ -223,7 +223,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.1),
+                        color: Colors.red.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Row(
@@ -262,7 +262,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.grey.withValues(alpha: 0.08),
+                        color: Colors.grey.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(6),
                       ),
                       child: Column(

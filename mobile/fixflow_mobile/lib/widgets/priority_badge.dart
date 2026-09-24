@@ -25,8 +25,8 @@ class PriorityBadgeWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+        color: color.withOpacity(0.15),
+        border: Border.all(color: color.withOpacity(0.4)),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -67,8 +67,8 @@ class RiskLevelBadgeWidget extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        border: Border.all(color: color.withValues(alpha: 0.3)),
+        color: color.withOpacity(0.12),
+        border: Border.all(color: color.withOpacity(0.3)),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Text(
@@ -99,10 +99,10 @@ class SLAResponseCardWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return Card(
       elevation: 0,
-      color: Colors.blue.withValues(alpha: 0.06),
+      color: Colors.blue.withOpacity(0.06),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: Colors.blue.withValues(alpha: 0.2)),
+        side: BorderSide(color: Colors.blue.withOpacity(0.2)),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12.0),
