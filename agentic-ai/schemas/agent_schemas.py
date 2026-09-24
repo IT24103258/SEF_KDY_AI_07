@@ -38,10 +38,24 @@ class AssignmentOutput(BaseModel):
     recommended_candidates: List[TechnicianCandidate]
     top_match_id: str
 
-# Member 4 Schema
+# Member 4 Schema - Scheduling & Work Order Management
 class ScheduleProposal(BaseModel):
     request_id: str
-    assigned_technician_id: str
-    proposed_start_time: str
-    proposed_end_time: str
-    is_conflict_free: bool
+    assigned_technician_id: str = ""
+    technician_id: Optional[str] = None
+    proposed_start_time: str = ""
+    proposed_end_time: str = ""
+    proposed_start: Optional[str] = None
+    proposed_end: Optional[str] = None
+    estimated_duration_minutes: int = 60
+    priority: str = "Medium"
+    sla_deadline: Optional[str] = None
+    conflict_detected: bool = False
+    conflict_details: List[str] = Field(default_factory=list)
+    within_business_hours: bool = True
+    within_technician_availability: bool = True
+    sla_compliant: bool = True
+    proposal_status: str = "Proposed"
+    decision_summary: str = "Selected an available technician slot within business hours and before the SLA deadline."
+    validation_required: bool = True
+    is_conflict_free: bool = True

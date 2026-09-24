@@ -3,6 +3,10 @@ import '../../screens/login_screen.dart';
 import '../../screens/home_screen.dart';
 import '../../screens/profile_screen.dart';
 import '../../screens/notifications_screen.dart';
+import '../../screens/technician_schedule_screen.dart';
+import '../../screens/job_details_screen.dart';
+import '../../screens/job_execution_screen.dart';
+import '../../screens/all_jobs_screen.dart';
 
 /*
 ================================================================================
@@ -44,7 +48,10 @@ class AppRouter {
   // ============================================================
   // MEMBER 4 ROUTE CONSTANTS — SCHEDULING & WORK ORDER MANAGEMENT
   // ============================================================
-  // Example: static const String workOrderChecklist = '/work-order-checklist';
+  static const String technicianSchedule = '/technician-schedule';
+  static const String jobDetails = '/job-details';
+  static const String jobExecution = '/job-execution';
+  static const String allJobs = '/all-jobs';
 
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -83,8 +90,16 @@ class AppRouter {
       // ============================================================
       // MEMBER 4 ROUTE CASES — SCHEDULING & WORK ORDER MANAGEMENT
       // ============================================================
-      // case workOrderChecklist:
-      //   return MaterialPageRoute(builder: (_) => const WorkOrderChecklistScreen());
+      case technicianSchedule:
+        return MaterialPageRoute(builder: (_) => const TechnicianScheduleScreen());
+      case jobDetails:
+        final id = settings.arguments as String? ?? '';
+        return MaterialPageRoute(builder: (_) => JobDetailsScreen(workOrderId: id));
+      case jobExecution:
+        final id = settings.arguments as String? ?? '';
+        return MaterialPageRoute(builder: (_) => JobExecutionScreen(workOrderId: id));
+      case allJobs:
+        return MaterialPageRoute(builder: (_) => const AllJobsScreen());
 
 
       default:

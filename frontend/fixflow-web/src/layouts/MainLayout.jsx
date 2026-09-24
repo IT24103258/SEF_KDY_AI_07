@@ -10,6 +10,7 @@ import {
   BarChart3,
   Wrench,
   ClipboardList,
+  Calendar,
   Sun,
   Moon,
   LogOut,
@@ -28,6 +29,24 @@ const navItems = [
     label: 'Dashboard',
     path: '/',
     icon: LayoutDashboard,
+    roles: ADMIN_ROLES
+  },
+  {
+    label: 'Work Orders',
+    path: '/work-orders',
+    icon: Wrench,
+    roles: ADMIN_ROLES
+  },
+  {
+    label: 'Approval Center',
+    path: '/approval-center',
+    icon: CheckSquare,
+    roles: ADMIN_ROLES
+  },
+  {
+    label: 'Calendar',
+    path: '/calendar',
+    icon: Calendar,
     roles: ADMIN_ROLES
   },
   {
@@ -55,14 +74,8 @@ const navItems = [
     roles: ADMIN_ROLES
   },
   {
-    label: 'Approvals',
-    path: '/approvals',
-    icon: CheckSquare,
-    roles: ADMIN_ROLES
-  },
-  {
     label: 'Reports',
-    path: '/reports',
+    path: '/reports/scheduling',
     icon: BarChart3,
     roles: ADMIN_ROLES
   },

@@ -1,5 +1,15 @@
 from pydantic import BaseModel, ValidationError
-from typing import Type, Tuple, Dict, Any, Optional
+from typing import Type, Tuple, Dict, Any, Optional, List
+from datetime import datetime
+
+def _parse_iso_timestamp(ts: Optional[str]) -> Optional[datetime]:
+    if not ts or not isinstance(ts, str):
+        return None
+    try:
+        clean_ts = ts.replace("Z", "+00:00")
+        return datetime.fromisoformat(clean_ts)
+    except Exception:
+        return None
 
 class DeterministicValidator:
     VALID_RISK_LEVELS = {"Low", "Medium", "High", "Critical"}
@@ -62,6 +72,89 @@ class DeterministicValidator:
         return True, output_data, "Deterministic priority validation passed."
 
     @staticmethod
+    def validate_schedule_proposal(output_data: Dict[str, Any], input_context: Optional[Dict[str, Any]] = None) -> Tuple[bool, Dict[str, Any], str]:
+        """
+        Deterministic safety and business rule validator for Component 4 (Scheduling & Work Order Management).
+        Enforces:
+        - Start time strictly earlier than end time
+        - Positive estimated duration
+        - Business hours compliance
+        - Technician availability compliance
+        - Independent overlap conflict detection against existing bookings: (exist_start < prop_end) and (exist_end > prop_start)
+        - SLA deadline compliance verification
+        """
+        context = input_context or {}
+        duration = output_data.get("estimated_duration_minutes", 0)
+        if duration <= 0:
+            return False, output_data, "Invalid duration: must be positive minutes."
+
+        start_str = output_data.get("proposed_start") or output_data.get("proposed_start_time")
+        end_str = output_data.get("proposed_end") or output_data.get("proposed_end_time")
+
+        if not start_str or not end_str:
+            return False, output_data, "Missing proposed start or end timestamp."
+
+        dt_start = _parse_iso_timestamp(start_str)
+        dt_end = _parse_iso_timestamp(end_str)
+
+        if dt_start and dt_end:
+            if dt_start >= dt_end:
+                return False, output_data, "Proposed start time must be strictly earlier than proposed end time."
+        else:
+            if start_str >= end_str:
+                return False, output_data, "Proposed start time must be strictly earlier than proposed end time."
+
+        if output_data.get("within_business_hours") is False:
+            return False, output_data, "Schedule rejected: Proposed slot falls outside operational business hours."
+
+        if output_data.get("within_technician_availability") is False:
+            return False, output_data, "Schedule rejected: Technician is not available for the requested slot."
+
+        # Deterministic Overlap Conflict Evaluation against existing bookings
+        bookings = output_data.get("existing_bookings") or context.get("existing_bookings") or []
+        for b in bookings:
+            b_start_str = b.get("start_time") or b.get("start") or b.get("proposed_start")
+            b_end_str = b.get("end_time") or b.get("end") or b.get("proposed_end")
+            b_start = _parse_iso_timestamp(b_start_str)
+            b_end = _parse_iso_timestamp(b_end_str)
+            if b_start and b_end and dt_start and dt_end:
+                if b_start < dt_end and b_end > dt_start:
+                    output_data["conflict_detected"] = True
+                    output_data["is_conflict_free"] = False
+                    return False, output_data, f"Schedule conflict detected with existing work order ({b_start_str} - {b_end_str})."
+            elif b_start_str and b_end_str:
+                if b_start_str < end_str and b_end_str > start_str:
+                    output_data["conflict_detected"] = True
+                    output_data["is_conflict_free"] = False
+                    return False, output_data, f"Schedule conflict detected with existing work order ({b_start_str} - {b_end_str})."
+
+        if output_data.get("conflict_detected") is True:
+            output_data["is_conflict_free"] = False
+            return False, output_data, "Schedule conflict detected with existing work order."
+
+        # SLA Deadline Verification
+        sla_str = output_data.get("sla_deadline") or context.get("sla_deadline")
+        if sla_str:
+            dt_sla = _parse_iso_timestamp(sla_str)
+            if dt_sla and dt_end:
+                if dt_end > dt_sla:
+                    output_data["sla_compliant"] = False
+                    return False, output_data, f"Proposed schedule breaches SLA deadline ({sla_str})."
+                else:
+                    output_data["sla_compliant"] = True
+            elif end_str and end_str > sla_str:
+                output_data["sla_compliant"] = False
+                return False, output_data, f"Proposed schedule breaches SLA deadline ({sla_str})."
+            else:
+                output_data["sla_compliant"] = True
+
+        if output_data.get("sla_compliant") is False:
+            return False, output_data, "Schedule rejected: Proposed slot breaches SLA deadline."
+
+        output_data["is_conflict_free"] = True
+        return True, output_data, "Deterministic schedule validation passed."
+
+    @staticmethod
     def check_human_approval_required(agent_name: str, output_data: Dict[str, Any]) -> Tuple[bool, str]:
         """
         Business rule check enforcing human-in-the-loop approval.
@@ -76,5 +169,9 @@ class DeterministicValidator:
             has_escalation = output_data.get("escalation_flag") is True or output_data.get("hazard_flag") is True
             if is_critical or has_escalation:
                 return True, "Critical risk/priority or escalation flag detected. Human manager sign-off required."
+        elif agent_name == "SchedulingAgent":
+            # Mandatory manager approval gate for all work-order schedule proposals
+            return True, "Work order schedule proposal requires Manager sign-off before dispatch."
         
         return False, ""
+
