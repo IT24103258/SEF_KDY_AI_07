@@ -63,8 +63,14 @@ public class WorkOrderTests
         };
         await context.MaintenanceRequests.AddAsync(request);
 
-        var sla = new SLAConfiguration { PriorityLevel = "High", ResponseTimeHours = 2, ResolutionTimeHours = 8 };
-        await context.SLAConfigurations.AddAsync(sla);
+        // Seed SLAs across standard levels to prevent SLA evaluation missing configurations
+        var slas = new List<SLAConfiguration>
+        {
+            new SLAConfiguration { PriorityLevel = "High", ResponseTimeHours = 2, ResolutionTimeHours = 24 },
+            new SLAConfiguration { PriorityLevel = "Medium", ResponseTimeHours = 4, ResolutionTimeHours = 48 },
+            new SLAConfiguration { PriorityLevel = "Low", ResponseTimeHours = 8, ResolutionTimeHours = 72 }
+        };
+        await context.SLAConfigurations.AddRangeAsync(slas);
 
         await context.SaveChangesAsync();
         return (context, tech, request, manager, requester);
@@ -81,12 +87,21 @@ public class WorkOrderTests
 
         var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
 
+        // Dynamically compute the next weekday at 10:00 AM to guarantee valid business hours
+        var targetDate = DateTime.UtcNow.Date.AddDays(1);
+        while (targetDate.DayOfWeek == DayOfWeek.Saturday || targetDate.DayOfWeek == DayOfWeek.Sunday)
+        {
+            targetDate = targetDate.AddDays(1);
+        }
+        var validBusinessSlot = targetDate.AddHours(10); // 10:00 AM weekday
+
         var reqDto = new ScheduleRequestDto
         {
             RequestId = request.Id,
             TechnicianId = tech.Id,
             Priority = "High",
-            EstimatedDurationMinutes = 120
+            EstimatedDurationMinutes = 120,
+            PreferredStartTime = validBusinessSlot
         };
 
         var proposal = await schedService.CreateConflictFreeWorkOrderAsync(reqDto, requester.Id);

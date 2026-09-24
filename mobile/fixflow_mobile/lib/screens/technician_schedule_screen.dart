@@ -53,7 +53,7 @@ class _TechnicianScheduleScreenState extends State<TechnicianScheduleScreen> {
               color: Theme.of(context).cardColor,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
+                  color: Colors.black.withOpacity(0.05),
                   blurRadius: 4,
                   offset: const Offset(0, 2),
                 ),
@@ -308,9 +308,9 @@ class _TechnicianScheduleScreenState extends State<TechnicianScheduleScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
+        color: color.withOpacity(0.12),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
+        border: Border.all(color: color.withOpacity(0.4)),
       ),
       child: Text(
         priority,

@@ -166,7 +166,7 @@ class _TechNavTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return ListTile(
       leading: CircleAvatar(
-        backgroundColor: color.withValues(alpha: 0.12),
+        backgroundColor: color.withOpacity(0.12),
         child: Icon(icon, color: color, size: 22),
       ),
       title: Text(
