@@ -2,7 +2,7 @@ name: Frontend Web CI (React + Vite)
 
 on:
   push:
-    branches: [ main, 'feature/*', 'member-*/*' ]
+    branches: [ main, 'feature/*', 'member-*/*', 'IT*/**' ]
   pull_request:
     branches: [ main ]
 
