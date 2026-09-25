@@ -193,7 +193,7 @@ export const WorkOrderDetailPage = () => {
           {isPending && (
             <>
               <Button variant="primary" size="sm" onClick={handleApprove} disabled={actionLoading}>
-                <Check size={14} /> Approve Work Order
+                <Check size={14} /> Approve
               </Button>
               <Button variant="secondary" size="sm" onClick={handleRequestRevision} disabled={actionLoading}>
                 Request Revision
@@ -216,11 +216,13 @@ export const WorkOrderDetailPage = () => {
       <Card style={{ marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
-              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.5rem', fontWeight: 700, margin: 0 }}>
-                {workOrder.workOrderNumber}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px' }}>
+              <h2 style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem', fontWeight: 700, margin: 0 }}>
+                {workOrder.workOrderNumber} — {workOrder.title}
               </h2>
               <StatusBadge status={workOrder.status} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.85rem', flexWrap: 'wrap' }}>
               <span
                 style={{
                   padding: '2px 8px',
@@ -233,13 +235,10 @@ export const WorkOrderDetailPage = () => {
               >
                 {workOrder.priority} Priority
               </span>
+              <span style={{ color: 'var(--text-secondary)' }}>
+                SLA: <strong style={{ color: 'var(--text-primary)' }}>{workOrder.slaDeadline ? new Date(workOrder.slaDeadline).toLocaleString() : '4 Hours'}</strong>
+              </span>
             </div>
-            <p style={{ color: 'var(--text-primary)', fontSize: '1.1rem', fontWeight: 600, margin: '4px 0' }}>
-              {workOrder.title}
-            </p>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.88rem', margin: 0 }}>
-              Request: {workOrder.requestNumber} • Location: {workOrder.locationName} ({workOrder.building}, {workOrder.room})
-            </p>
           </div>
 
           {workOrder.conflictDetected && (
@@ -264,58 +263,82 @@ export const WorkOrderDetailPage = () => {
       </Card>
 
       {/* 2-Column Grid: Details Left, Timeline Right */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)', gap: '1.5rem', marginBottom: '1.5rem' }}>
-        {/* Left: Key Operational Details */}
-        <Card title="Operational Details">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem', fontSize: '0.88rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)', gap: '1.5rem', marginBottom: '1.5rem' }}>
+        {/* Left: Details Panel with specified fields */}
+        <Card title="Work Order Details">
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.1rem', fontSize: '0.88rem' }}>
             <div>
-              <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.78rem', marginBottom: '2px' }}>
-                ASSIGNED TECHNICIAN
+              <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '2px' }}>
+                Job Title
               </span>
-              <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <User size={15} color="var(--primary-color)" /> {workOrder.technicianName}
-              </span>
-              <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'block' }}>
-                {workOrder.technicianSpecialization} ({workOrder.technicianEmployeeId})
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                {workOrder.title}
               </span>
             </div>
 
             <div>
-              <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.78rem', marginBottom: '2px' }}>
-                SCHEDULED WINDOW
+              <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '2px' }}>
+                Request
               </span>
-              <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Calendar size={15} color="var(--primary-color)" />
-                {workOrder.scheduledStartTime ? new Date(workOrder.scheduledStartTime).toLocaleDateString() : 'Unscheduled'}
-              </span>
-              <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'block' }}>
-                {workOrder.scheduledStartTime ? `${new Date(workOrder.scheduledStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - ${workOrder.scheduledEndTime ? new Date(workOrder.scheduledEndTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''} (${workOrder.estimatedDurationMinutes}m)` : ''}
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                {workOrder.requestNumber ? `${workOrder.requestNumber}${workOrder.requestTitle ? ` — ${workOrder.requestTitle}` : ''}` : 'Linked Maintenance Request'}
               </span>
             </div>
 
             <div>
-              <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.78rem', marginBottom: '2px' }}>
-                SLA RESOLUTION TARGET
+              <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '2px' }}>
+                Location
               </span>
-              <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <Clock size={15} color="var(--warning-color)" />
-                {workOrder.slaDeadline ? new Date(workOrder.slaDeadline).toLocaleString() : 'Not configured'}
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                {workOrder.locationName || 'Main Complex'} {workOrder.building ? `(${workOrder.building} — ${workOrder.room})` : ''}
               </span>
             </div>
 
             <div>
-              <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.78rem', marginBottom: '2px' }}>
-                APPROVAL STATUS
+              <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '2px' }}>
+                Technician
               </span>
-              <span style={{ fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <ShieldCheck size={15} color="var(--success-color)" />
-                {workOrder.approvedByName ? `Approved by ${workOrder.approvedByName}` : 'Awaiting Manager Sign-off'}
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <User size={14} color="var(--primary-color)" /> {workOrder.technicianName}
               </span>
-              {workOrder.approvedAt && (
-                <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'block' }}>
-                  {new Date(workOrder.approvedAt).toLocaleString()}
-                </span>
-              )}
+            </div>
+
+            <div>
+              <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '2px' }}>
+                Priority
+              </span>
+              <span style={{ fontWeight: 600, color: workOrder.priority === 'Critical' ? 'var(--danger-color)' : 'var(--text-primary)' }}>
+                {workOrder.priority}
+              </span>
+            </div>
+
+            <div>
+              <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '2px' }}>
+                Schedule
+              </span>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                {workOrder.scheduledStartTime ? (
+                  `${new Date(workOrder.scheduledStartTime).toLocaleDateString()}, ${new Date(workOrder.scheduledStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${workOrder.scheduledEndTime ? new Date(workOrder.scheduledEndTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}`
+                ) : 'Unscheduled Draft'}
+              </span>
+            </div>
+
+            <div>
+              <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '2px' }}>
+                SLA Deadline
+              </span>
+              <span style={{ fontWeight: 600, color: 'var(--warning-color)' }}>
+                {workOrder.slaDeadline ? new Date(workOrder.slaDeadline).toLocaleString() : 'Within 4 Hours'}
+              </span>
+            </div>
+
+            <div style={{ gridColumn: 'span 2' }}>
+              <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '2px' }}>
+                Estimated Duration
+              </span>
+              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                {workOrder.estimatedDurationMinutes ? `${Math.round(workOrder.estimatedDurationMinutes / 60)} Hours (${workOrder.estimatedDurationMinutes} mins)` : '2 Hours'}
+              </span>
             </div>
           </div>
 
@@ -340,37 +363,39 @@ export const WorkOrderDetailPage = () => {
           )}
         </Card>
 
-        {/* Right: Real Status History Timeline */}
-        <Card title="Execution Timeline">
-          <div style={{ position: 'relative', paddingLeft: '1rem' }}>
-            {workOrder.statusHistories && workOrder.statusHistories.length > 0 ? (
-              workOrder.statusHistories.map((h, idx) => (
-                <div key={h.id || idx} style={{ position: 'relative', marginBottom: '1.25rem', paddingLeft: '1.25rem' }}>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      left: '-5px',
-                      top: '4px',
-                      width: '10px',
-                      height: '10px',
-                      borderRadius: '50%',
-                      backgroundColor: 'var(--primary-color)'
-                    }}
-                  />
-                  <div style={{ fontSize: '0.85rem', fontWeight: 650, color: 'var(--text-primary)' }}>
-                    {h.newStatus}
-                  </div>
-                  <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    {h.reason || `Status updated by ${h.changedByName || 'System'}`}
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    {new Date(h.timestamp).toLocaleString()}
-                  </div>
+        {/* Right: Lifecycle Timeline in 5 steps */}
+        <Card title="Lifecycle Timeline">
+          <div style={{ position: 'relative', paddingLeft: '1rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            {[
+              { label: '1. Draft Created', reached: true, date: workOrder.createdAt },
+              { label: '2. AI Proposed', reached: !!workOrder.scheduledStartTime, date: workOrder.proposedAt || workOrder.createdAt },
+              { label: '3. Validated', reached: !workOrder.conflictDetected, date: workOrder.validatedAt || workOrder.createdAt },
+              { label: '4. Approved', reached: workOrder.status === 'Approved' || workOrder.status === 'Scheduled' || workOrder.status === 'InProgress' || workOrder.status === 'Completed', date: workOrder.approvedAt },
+              { label: '5. In Progress', reached: workOrder.status === 'InProgress' || workOrder.status === 'Completed', date: workOrder.startedAt }
+            ].map((step, idx) => (
+              <div key={idx} style={{ position: 'relative', paddingLeft: '1.5rem' }}>
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: '-6px',
+                    top: '3px',
+                    width: '12px',
+                    height: '12px',
+                    borderRadius: '50%',
+                    backgroundColor: step.reached ? 'var(--primary-color)' : 'var(--border-color)',
+                    border: '2px solid var(--bg-card)'
+                  }}
+                />
+                <div style={{ fontSize: '0.86rem', fontWeight: step.reached ? 650 : 500, color: step.reached ? 'var(--text-primary)' : 'var(--text-secondary)' }}>
+                  {step.label}
                 </div>
-              ))
-            ) : (
-              <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>No status events recorded yet.</p>
-            )}
+                {step.date && (
+                  <div style={{ fontSize: '0.74rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
+                    {new Date(step.date).toLocaleString()}
+                  </div>
+                )}
+              </div>
+            ))}
           </div>
         </Card>
       </div>
@@ -379,10 +404,10 @@ export const WorkOrderDetailPage = () => {
       <Card>
         <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border-color)', marginBottom: '1.25rem', paddingBottom: '0.5rem' }}>
           {[
-            { id: 'details', label: 'Full Description' },
-            { id: 'validation', label: 'Validation Checklist' },
-            { id: 'notes', label: `Work Notes (${workOrder.notes?.length || 0})` },
-            { id: 'evidence', label: 'Completion Evidence' }
+            { id: 'details', label: 'Details' },
+            { id: 'validation', label: 'Audit' },
+            { id: 'notes', label: `Notes (${workOrder.notes?.length || 0})` },
+            { id: 'evidence', label: 'Validation' }
           ].map((tab) => (
             <button
               key={tab.id}

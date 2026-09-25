@@ -53,6 +53,20 @@ public class WorkOrdersController : ControllerBase
         return Ok(ApiResponse<PagedResultDto<WorkOrderSummaryDto>>.SuccessResult(result));
     }
 
+    [HttpGet("available-requests")]
+    public async Task<ActionResult<ApiResponse<List<MaintenanceRequestSummaryDto>>>> GetAvailableRequests()
+    {
+        var requests = await _workOrderService.GetAvailableRequestsAsync();
+        return Ok(ApiResponse<List<MaintenanceRequestSummaryDto>>.SuccessResult(requests));
+    }
+
+    [HttpGet("technicians")]
+    public async Task<ActionResult<ApiResponse<List<TechnicianSummaryDto>>>> GetTechnicians()
+    {
+        var technicians = await _workOrderService.GetTechniciansAsync();
+        return Ok(ApiResponse<List<TechnicianSummaryDto>>.SuccessResult(technicians));
+    }
+
     [HttpGet("{id}")]
     public async Task<ActionResult<ApiResponse<WorkOrderDto>>> GetWorkOrderById(Guid id)
     {

@@ -104,6 +104,8 @@ export const CalendarPage = () => {
     setCurrentDate(new Date());
   };
 
+  const [search, setSearch] = useState('');
+
   // Generate Week Days (Sun - Sat)
   const getWeekDays = () => {
     const days = [];
@@ -122,21 +124,30 @@ export const CalendarPage = () => {
   const getEventsForDay = (dayDate) => {
     return events.filter((ev) => {
       const evDate = new Date(ev.start);
-      return (
+      const matchesDay =
         evDate.getFullYear() === dayDate.getFullYear() &&
         evDate.getMonth() === dayDate.getMonth() &&
-        evDate.getDate() === dayDate.getDate()
+        evDate.getDate() === dayDate.getDate();
+
+      if (!matchesDay) return false;
+      if (!search.trim()) return true;
+
+      const q = search.toLowerCase();
+      return (
+        ev.workOrderNumber?.toLowerCase().includes(q) ||
+        ev.title?.toLowerCase().includes(q) ||
+        ev.technicianName?.toLowerCase().includes(q)
       );
     });
   };
 
-  const formattedMonthYear = currentDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+  const formattedWeekRange = `${weekDays[0].toLocaleDateString('default', { month: 'short', day: 'numeric' })} – ${weekDays[6].toLocaleDateString('default', { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
   return (
     <div>
       <PageHeader
-        title="Schedule & Dispatch Board"
-        description="Visual calendar of scheduled maintenance jobs, technician assignments & conflict tracking"
+        title="Schedule Board"
+        description="Visual calendar of scheduled maintenance jobs, technician assignments &amp; conflict tracking"
         action={
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <Button
@@ -165,24 +176,36 @@ export const CalendarPage = () => {
             <Button variant="secondary" size="sm" onClick={handleToday}>
               Today
             </Button>
-            <Button variant="secondary" size="sm" onClick={handlePrev} title="Previous">
-              <ChevronLeft size={16} />
+            <Button variant="secondary" size="sm" onClick={handlePrev} title="Previous Week">
+              <ChevronLeft size={16} /> Previous Week
             </Button>
-            <Button variant="secondary" size="sm" onClick={handleNext} title="Next">
-              <ChevronRight size={16} />
+            <Button variant="secondary" size="sm" onClick={handleNext} title="Next Week">
+              Next Week <ChevronRight size={16} />
             </Button>
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.1rem', marginLeft: '8px' }}>
-              {formattedMonthYear}
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.05rem', marginLeft: '8px' }}>
+              {formattedWeekRange}
             </span>
           </div>
 
           {/* Filters */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            {/* Search */}
+            <div className="ff-input-wrap" style={{ minWidth: '160px' }}>
+              <input
+                type="text"
+                className="ff-input"
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                style={{ padding: '6px 10px', fontSize: '0.82rem' }}
+              />
+            </div>
+
             <select
               className="ff-input"
               value={selectedTech}
               onChange={(e) => setSelectedTech(e.target.value)}
-              style={{ minWidth: '160px', padding: '6px 10px', fontSize: '0.82rem' }}
+              style={{ minWidth: '150px', padding: '6px 10px', fontSize: '0.82rem' }}
             >
               <option value="">All Technicians</option>
               {technicians.map((t) => (
@@ -196,7 +219,7 @@ export const CalendarPage = () => {
               className="ff-input"
               value={selectedPriority}
               onChange={(e) => setSelectedPriority(e.target.value)}
-              style={{ minWidth: '130px', padding: '6px 10px', fontSize: '0.82rem' }}
+              style={{ minWidth: '120px', padding: '6px 10px', fontSize: '0.82rem' }}
             >
               <option value="">All Priorities</option>
               <option value="Critical">Critical</option>
@@ -209,7 +232,7 @@ export const CalendarPage = () => {
               className="ff-input"
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
-              style={{ minWidth: '130px', padding: '6px 10px', fontSize: '0.82rem' }}
+              style={{ minWidth: '120px', padding: '6px 10px', fontSize: '0.82rem' }}
             >
               <option value="">All Statuses</option>
               <option value="Scheduled">Scheduled</option>
@@ -218,6 +241,23 @@ export const CalendarPage = () => {
               <option value="Completed">Completed</option>
             </select>
           </div>
+        </div>
+
+        {/* Status Legend */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border-color)', fontSize: '0.78rem' }}>
+          <span style={{ fontWeight: 650, color: 'var(--text-secondary)' }}>Legend:</span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: 'var(--primary-color)' }} /> Approved
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: 'var(--warning-color)' }} /> Pending
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: '#3b82f6' }} /> In Progress
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+            <span style={{ width: '10px', height: '10px', borderRadius: '2px', backgroundColor: 'var(--danger-color)' }} /> High Priority
+          </span>
         </div>
       </Card>
 
@@ -344,8 +384,8 @@ export const CalendarPage = () => {
                             {new Date(ev.end).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                           </div>
 
-                          <div style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            👤 {ev.technicianName}
+                          <div style={{ color: 'var(--text-secondary)', fontSize: '0.72rem', marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                            <User size={11} /> {ev.technicianName}
                           </div>
                         </div>
                       );

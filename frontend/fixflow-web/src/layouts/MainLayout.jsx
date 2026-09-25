@@ -6,11 +6,12 @@ import {
   MapPin,
   Boxes,
   Workflow,
-  CheckSquare,
   BarChart3,
   Wrench,
   ClipboardList,
-  Calendar,
+  CalendarDays,
+  CheckCircle,
+  TrendingUp,
   Sun,
   Moon,
   LogOut,
@@ -24,29 +25,12 @@ import { BrandMark } from '../components/BrandMark';
 
 const ADMIN_ROLES = ['Administrator', 'Manager'];
 
-const navItems = [
+// Flat nav items for non-grouped entries
+const topNavItems = [
   {
     label: 'Dashboard',
     path: '/',
     icon: LayoutDashboard,
-    roles: ADMIN_ROLES
-  },
-  {
-    label: 'Work Orders',
-    path: '/work-orders',
-    icon: Wrench,
-    roles: ADMIN_ROLES
-  },
-  {
-    label: 'Approval Center',
-    path: '/approval-center',
-    icon: CheckSquare,
-    roles: ADMIN_ROLES
-  },
-  {
-    label: 'Calendar',
-    path: '/calendar',
-    icon: Calendar,
     roles: ADMIN_ROLES
   },
   {
@@ -74,12 +58,6 @@ const navItems = [
     roles: ADMIN_ROLES
   },
   {
-    label: 'Reports',
-    path: '/reports/scheduling',
-    icon: BarChart3,
-    roles: ADMIN_ROLES
-  },
-  {
     label: 'My Work Orders',
     path: '/technician',
     icon: Wrench,
@@ -92,6 +70,19 @@ const navItems = [
     roles: ['Requester']
   }
 ];
+
+// Component 4 grouped navigation
+const schedulingGroup = {
+  label: 'Scheduling & Work Orders',
+  icon: Wrench,
+  roles: ADMIN_ROLES,
+  children: [
+    { label: 'Work Orders', path: '/work-orders', icon: ClipboardList },
+    { label: 'Approval Center', path: '/approval-center', icon: CheckCircle },
+    { label: 'Schedule Board', path: '/calendar', icon: CalendarDays },
+    { label: 'Reports & Analytics', path: '/reports/scheduling', icon: TrendingUp }
+  ]
+};
 
 export const MainLayout = ({ children }) => {
   const { user, logout } = useAuth();
@@ -112,12 +103,15 @@ export const MainLayout = ({ children }) => {
       .toUpperCase() || 'U';
 
   // Show only navigation items allowed for the logged-in user's role
-  const visibleNavItems = navItems.filter(item =>
+  const visibleTopItems = topNavItems.filter(item =>
     item.roles.includes(user?.role)
   );
 
+  const showSchedulingGroup = schedulingGroup.roles.includes(user?.role);
+
   const NavLink = ({ item }) => {
-    const active = location.pathname === item.path;
+    const active = location.pathname === item.path ||
+      (item.path !== '/' && location.pathname.startsWith(item.path));
     const Icon = item.icon;
 
     return (
@@ -132,6 +126,32 @@ export const MainLayout = ({ children }) => {
     );
   };
 
+  // Sub-nav link for grouped items (slightly indented in mobile, same style on desktop)
+  const SubNavLink = ({ item }) => {
+    const active = location.pathname === item.path ||
+      (item.path !== '/' && location.pathname.startsWith(item.path));
+    const Icon = item.icon;
+
+    return (
+      <Link
+        to={item.path}
+        className={`ff-nav-link ${active ? 'active' : ''}`}
+        onClick={() => setMenuOpen(false)}
+        style={{ paddingLeft: '18px', fontSize: '0.82rem' }}
+      >
+        <Icon size={14} />
+        {item.label}
+      </Link>
+    );
+  };
+
+  // Scheduling group is active if any child route matches
+  const schedulingActive = schedulingGroup.children.some(
+    c => location.pathname === c.path || location.pathname.startsWith(c.path)
+  );
+
+  const GroupIcon = schedulingGroup.icon;
+
   return (
     <div style={{ minHeight: '100vh' }}>
 
@@ -141,10 +161,22 @@ export const MainLayout = ({ children }) => {
         <BrandMark />
 
         {/* Desktop Navigation */}
-        <nav className="ff-nav-links">
-          {visibleNavItems.map(item => (
+        <nav className="ff-nav-links" style={{ alignItems: 'center', position: 'relative' }}>
+          {visibleTopItems.map(item => (
             <NavLink key={item.path} item={item} />
           ))}
+
+          {/* Scheduling & Work Orders Tab -> Navigates directly to /work-orders without dropdown arrow */}
+          {showSchedulingGroup && (
+            <Link
+              to="/work-orders"
+              className={`ff-nav-link ${schedulingActive ? 'active' : ''}`}
+              onClick={() => setMenuOpen(false)}
+            >
+              <GroupIcon size={16} />
+              Scheduling &amp; Work Orders
+            </Link>
+          )}
         </nav>
 
         {/* Navigation Actions */}
@@ -223,15 +255,98 @@ export const MainLayout = ({ children }) => {
         </div>
       </header>
 
+      {/* Component 4 Sub-Navigation Bar */}
+      {showSchedulingGroup && schedulingActive && (
+        <div
+          className="glass"
+          style={{
+            borderBottom: '1px solid var(--border-color)',
+            backgroundColor: 'var(--glass-bg)',
+            backdropFilter: 'blur(var(--glass-blur))',
+            WebkitBackdropFilter: 'blur(var(--glass-blur))'
+          }}
+        >
+          <div
+            style={{
+              maxWidth: '1280px',
+              margin: '0 auto',
+              padding: '6px 1.5rem',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              overflowX: 'auto',
+              scrollbarWidth: 'none'
+            }}
+          >
+            {schedulingGroup.children.map(child => {
+              const isSubActive =
+                location.pathname === child.path ||
+                (child.path === '/work-orders' && location.pathname.startsWith('/work-orders/'));
+              const SubIcon = child.icon;
+
+              return (
+                <Link
+                  key={child.path}
+                  to={child.path}
+                  className={`ff-nav-link ${isSubActive ? 'active' : ''}`}
+                  style={{
+                    fontSize: '0.84rem',
+                    padding: '5px 12px',
+                    borderRadius: 'var(--radius-pill)'
+                  }}
+                >
+                  <SubIcon size={14} />
+                  {child.label}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Mobile Navigation */}
       <div
         className={`ff-mobile-panel glass-strong ${
           menuOpen ? 'open' : ''
         }`}
       >
-        {visibleNavItems.map(item => (
+        {visibleTopItems.map(item => (
           <NavLink key={item.path} item={item} />
         ))}
+
+        {/* Scheduling group in mobile */}
+        {showSchedulingGroup && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '4px' }}>
+            <Link
+              to="/work-orders"
+              className={`ff-nav-link ${schedulingActive ? 'active' : ''}`}
+              onClick={() => setMenuOpen(false)}
+            >
+              <GroupIcon size={16} />
+              Scheduling &amp; Work Orders
+            </Link>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', paddingLeft: '14px' }}>
+              {schedulingGroup.children.map(child => {
+                const isSubActive =
+                  location.pathname === child.path ||
+                  (child.path === '/work-orders' && location.pathname.startsWith('/work-orders/'));
+                const SubIcon = child.icon;
+                return (
+                  <Link
+                    key={child.path}
+                    to={child.path}
+                    className={`ff-nav-link ${isSubActive ? 'active' : ''}`}
+                    onClick={() => setMenuOpen(false)}
+                    style={{ fontSize: '0.82rem' }}
+                  >
+                    <SubIcon size={14} />
+                    {child.label}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Main Content */}
@@ -247,4 +362,4 @@ export const MainLayout = ({ children }) => {
 
     </div>
   );
-};
+};

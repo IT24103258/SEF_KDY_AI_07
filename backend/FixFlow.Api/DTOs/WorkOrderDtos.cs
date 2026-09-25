@@ -85,6 +85,35 @@ public class WorkOrderCreateDto
     public DateTime? SLADeadline { get; set; }
 }
 
+public class MaintenanceRequestSummaryDto
+{
+    public Guid Id { get; set; }
+    public string RequestNumber { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
+    public string Status { get; set; } = string.Empty;
+    public Guid LocationId { get; set; }
+    public string LocationName { get; set; } = string.Empty;
+    public string Building { get; set; } = string.Empty;
+    public string Priority { get; set; } = "Medium";
+    public Guid? CategoryId { get; set; }
+    public string CategoryName { get; set; } = string.Empty;
+    public Guid RequesterId { get; set; }
+    public string RequesterName { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
+}
+
+public class TechnicianSummaryDto
+{
+    public Guid Id { get; set; }
+    public Guid UserId { get; set; }
+    public string EmployeeId { get; set; } = string.Empty;
+    public string Name { get; set; } = string.Empty;
+    public string Specialization { get; set; } = string.Empty;
+    public bool IsAvailable { get; set; }
+    public List<string> Skills { get; set; } = new();
+}
+
 public class WorkOrderUpdateDto
 {
     public string Title { get; set; } = string.Empty;

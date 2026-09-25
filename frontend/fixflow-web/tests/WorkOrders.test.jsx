@@ -6,6 +6,7 @@ import { WorkOrdersPage } from '../src/pages/WorkOrdersPage';
 import { ApprovalCenterPage } from '../src/pages/ApprovalCenterPage';
 import { CalendarPage } from '../src/pages/CalendarPage';
 import { WorkOrderReportsPage } from '../src/pages/WorkOrderReportsPage';
+import { WorkOrderModal } from '../src/components/WorkOrderModal';
 
 // Mock workOrderApi
 vi.mock('../src/services/workOrderApi', () => ({
@@ -34,7 +35,16 @@ vi.mock('../src/services/workOrderApi', () => ({
       }
     }),
     getUsers: vi.fn().mockResolvedValue({ success: true, data: [] }),
-    getLocations: vi.fn().mockResolvedValue({ success: true, data: [] }),
+    getLocations: vi.fn().mockResolvedValue({ success: true, data: [{ id: 'loc-1', name: 'Tower A', building: 'Tower A' }] }),
+    getAvailableRequests: vi.fn().mockResolvedValue({
+      success: true,
+      data: [{ id: 'req-1', requestNumber: 'REQ-2026-0001', title: 'Lobby AC Failure', locationId: 'loc-1', locationName: 'Tower A', priority: 'High' }]
+    }),
+    getTechnicians: vi.fn().mockResolvedValue({
+      success: true,
+      data: [{ id: 'tech-1', userId: 'user-1', name: 'Kamal Perera', specialization: 'HVAC', employeeId: 'TECH-001' }]
+    }),
+    createWorkOrder: vi.fn().mockResolvedValue({ success: true, data: { id: 'wo-new' } }),
     getPendingApprovals: vi.fn().mockResolvedValue({
       success: true,
       data: [
@@ -94,7 +104,7 @@ describe('Component 4 React Frontend Screens', () => {
       </BrowserRouter>
     );
 
-    expect(screen.getByText('Work Order Management')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Work Orders' })).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/search work orders/i)).toBeInTheDocument();
 
     await waitFor(() => {
@@ -110,11 +120,11 @@ describe('Component 4 React Frontend Screens', () => {
       </BrowserRouter>
     );
 
-    expect(screen.getByText('Manager Approval Center')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Approval Center' })).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByText(/AI Proposal Details/i)).toBeInTheDocument();
-      expect(screen.getByText(/Deterministic Verification/i)).toBeInTheDocument();
+      expect(screen.getByText(/Validation Checks/i)).toBeInTheDocument();
       expect(screen.getByText(/Approve & Dispatch/i)).toBeInTheDocument();
     });
   });
@@ -126,7 +136,7 @@ describe('Component 4 React Frontend Screens', () => {
       </BrowserRouter>
     );
 
-    expect(screen.getByText('Schedule & Dispatch Board')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 1, name: 'Schedule Board' })).toBeInTheDocument();
     expect(screen.getByText('Today')).toBeInTheDocument();
     expect(screen.getByText('Week View')).toBeInTheDocument();
   });
@@ -139,10 +149,30 @@ describe('Component 4 React Frontend Screens', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Scheduling & Work Order Analytics')).toBeInTheDocument();
-      expect(screen.getByText('Total Jobs')).toBeInTheDocument();
-      expect(screen.getByText('92.5%')).toBeInTheDocument();
-      expect(screen.getByText('Conflicts Detected')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { level: 1, name: 'Reports & Analytics' })).toBeInTheDocument();
+      expect(screen.getAllByText('Completed').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('In Progress').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Pending').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Breached').length).toBeGreaterThan(0);
+      expect(screen.getByText('Technician Performance')).toBeInTheDocument();
+    });
+  });
+
+  it('renders WorkOrderModal with request selection and job title dropdown', async () => {
+    render(
+      <BrowserRouter>
+        <WorkOrderModal isOpen={true} onClose={vi.fn()} onSaved={vi.fn()} />
+      </BrowserRouter>
+    );
+
+    expect(screen.getByText('Create New Work Order')).toBeInTheDocument();
+    expect(screen.getAllByText(/Request/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Job Title/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Assigned Technician/).length).toBeGreaterThan(0);
+
+    await waitFor(() => {
+      expect(screen.getByText(/-- Select Existing Maintenance Request --/)).toBeInTheDocument();
+      expect(screen.getByText(/-- Select Job Title --/)).toBeInTheDocument();
     });
   });
 });

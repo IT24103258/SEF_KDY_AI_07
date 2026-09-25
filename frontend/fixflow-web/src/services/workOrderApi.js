@@ -113,5 +113,13 @@ export const workOrderApi = {
 
   getUsers: async () => {
     return await api.get('/users');
+  },
+
+  getAvailableRequests: async () => {
+    return await api.get('/work-orders/available-requests');
+  },
+
+  getTechnicians: async () => {
+    return await api.get('/work-orders/technicians');
   }
 };

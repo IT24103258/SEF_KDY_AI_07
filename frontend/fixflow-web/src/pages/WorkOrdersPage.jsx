@@ -13,7 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Eye,
-  Edit2,
+  Pencil,
   Trash2,
   CheckCircle2,
   AlertCircle
@@ -32,8 +32,9 @@ export const WorkOrdersPage = () => {
   const [totalCount, setTotalCount] = useState(0);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('');
-  const [priority, setPriority] = useState('');
   const [technicianId, setTechnicianId] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
   const [technicians, setTechnicians] = useState([]);
 
   // Modal State
@@ -49,8 +50,10 @@ export const WorkOrdersPage = () => {
         pageSize,
         search,
         status: status || undefined,
-        priority: priority || undefined,
-        technicianId: technicianId || undefined
+        technicianId: technicianId || undefined,
+        startDate: dateFilter || undefined,
+        sortBy: sortBy === 'scheduled' ? 'scheduledStartTime' : 'createdAt',
+        sortDirection: sortBy === 'oldest' ? 'asc' : 'desc'
       });
 
       if (res?.success && res.data) {
@@ -62,7 +65,7 @@ export const WorkOrdersPage = () => {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search, status, priority, technicianId]);
+  }, [page, pageSize, search, status, technicianId, dateFilter, sortBy]);
 
   useEffect(() => {
     fetchWorkOrders();
@@ -124,8 +127,8 @@ export const WorkOrdersPage = () => {
   return (
     <div>
       <PageHeader
-        title="Work Order Management"
-        description="Comprehensive lifecycle dispatching, AI schedule proposals & field execution"
+        title="Work Orders"
+        description="Comprehensive lifecycle dispatching, AI schedule proposals &amp; field execution"
         action={
           <Button
             variant="primary"
@@ -145,7 +148,7 @@ export const WorkOrdersPage = () => {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))',
             gap: '0.75rem',
             alignItems: 'center'
           }}
@@ -156,7 +159,7 @@ export const WorkOrdersPage = () => {
             <input
               type="text"
               className="ff-input ff-input-has-icon"
-              placeholder="Search work orders, requests, techs..."
+              placeholder="Search work orders..."
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
@@ -176,7 +179,7 @@ export const WorkOrdersPage = () => {
           >
             <option value="">All Statuses</option>
             <option value="Draft">Draft</option>
-            <option value="PendingManagerApproval">Pending Approval</option>
+            <option value="PendingManagerApproval">Pending</option>
             <option value="Approved">Approved</option>
             <option value="Scheduled">Scheduled</option>
             <option value="InProgress">In Progress</option>
@@ -185,22 +188,6 @@ export const WorkOrdersPage = () => {
             <option value="Cancelled">Cancelled</option>
             <option value="Rejected">Rejected</option>
             <option value="RevisionRequested">Revision Requested</option>
-          </select>
-
-          {/* Priority Filter */}
-          <select
-            className="ff-input"
-            value={priority}
-            onChange={(e) => {
-              setPriority(e.target.value);
-              setPage(1);
-            }}
-          >
-            <option value="">All Priorities</option>
-            <option value="Critical">Critical</option>
-            <option value="High">High</option>
-            <option value="Medium">Medium</option>
-            <option value="Low">Low</option>
           </select>
 
           {/* Technician Filter */}
@@ -212,12 +199,38 @@ export const WorkOrdersPage = () => {
               setPage(1);
             }}
           >
-            <option value="">All Staff / Techs</option>
+            <option value="">All Technicians</option>
             {technicians.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.firstName} {t.lastName}
               </option>
             ))}
+          </select>
+
+          {/* Date Filter */}
+          <input
+            type="date"
+            className="ff-input"
+            title="Filter by Scheduled Date"
+            value={dateFilter}
+            onChange={(e) => {
+              setDateFilter(e.target.value);
+              setPage(1);
+            }}
+          />
+
+          {/* Sort Control */}
+          <select
+            className="ff-input"
+            value={sortBy}
+            onChange={(e) => {
+              setSortBy(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="newest">Sort: Newest First</option>
+            <option value="oldest">Sort: Oldest First</option>
+            <option value="scheduled">Sort: Scheduled Date</option>
           </select>
         </div>
       </Card>
@@ -257,11 +270,10 @@ export const WorkOrdersPage = () => {
                     fontWeight: 600
                   }}
                 >
-                  <th style={{ padding: '12px 16px' }}>Work Order #</th>
-                  <th style={{ padding: '12px 16px' }}>Request / Title</th>
+                  <th style={{ padding: '12px 16px' }}>ID</th>
+                  <th style={{ padding: '12px 16px' }}>Request</th>
                   <th style={{ padding: '12px 16px' }}>Technician</th>
-                  <th style={{ padding: '12px 16px' }}>Scheduled Time</th>
-                  <th style={{ padding: '12px 16px' }}>Priority</th>
+                  <th style={{ padding: '12px 16px' }}>Scheduled</th>
                   <th style={{ padding: '12px 16px' }}>Status</th>
                   <th style={{ padding: '12px 16px', textAlign: 'right' }}>Actions</th>
                 </tr>
@@ -331,10 +343,6 @@ export const WorkOrdersPage = () => {
                       </td>
 
                       <td style={{ padding: '12px 16px' }}>
-                        <PriorityBadge priorityLevel={wo.priority} />
-                      </td>
-
-                      <td style={{ padding: '12px 16px' }}>
                         <StatusBadge status={wo.status} />
                       </td>
 
@@ -359,7 +367,7 @@ export const WorkOrdersPage = () => {
                             }}
                             style={{ padding: '4px 8px' }}
                           >
-                            <Edit2 size={14} />
+                            <Pencil size={14} />
                           </Button>
                           <Button
                             variant="danger"

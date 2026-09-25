@@ -179,11 +179,24 @@ public class WorkOrderService : IWorkOrderService
 
     public async Task<WorkOrderDto> CreateWorkOrderAsync(WorkOrderCreateDto dto, Guid creatorUserId)
     {
-        var req = await _context.MaintenanceRequests.FindAsync(dto.RequestId);
-        if (req == null) throw new NotFoundException($"Maintenance request '{dto.RequestId}' not found.");
+        if (dto.RequestId == Guid.Empty)
+            throw new ArgumentException("A valid Maintenance Request ID is required.");
 
-        var tech = await _context.Technicians.FindAsync(dto.TechnicianId);
-        if (tech == null) throw new NotFoundException($"Technician '{dto.TechnicianId}' not found.");
+        var req = await _context.MaintenanceRequests
+            .Include(r => r.Location)
+            .Include(r => r.Category)
+            .FirstOrDefaultAsync(r => r.Id == dto.RequestId);
+        if (req == null)
+            throw new NotFoundException($"Maintenance request '{dto.RequestId}' was not found.");
+
+        if (dto.TechnicianId == Guid.Empty)
+            throw new ArgumentException("A valid Technician ID is required.");
+
+        var tech = await _context.Technicians
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.Id == dto.TechnicianId || t.UserId == dto.TechnicianId);
+        if (tech == null)
+            throw new NotFoundException($"Technician '{dto.TechnicianId}' was not found.");
 
         var workOrderCount = await _context.Set<WorkOrder>().CountAsync() + 1;
         var workOrderNumber = $"WO-{DateTime.UtcNow:yyyyMM}-{workOrderCount:D4}";
@@ -194,9 +207,9 @@ public class WorkOrderService : IWorkOrderService
         {
             WorkOrderNumber = workOrderNumber,
             Title = dto.Title,
-            Description = dto.Description,
-            RequestId = dto.RequestId,
-            TechnicianId = dto.TechnicianId,
+            Description = string.IsNullOrWhiteSpace(dto.Description) ? req.Description : dto.Description,
+            RequestId = req.Id,
+            TechnicianId = tech.Id,
             LocationId = dto.LocationId ?? req.LocationId,
             Priority = priority,
             Status = dto.ScheduledStartTime.HasValue ? WorkOrderStatus.Scheduled : WorkOrderStatus.Draft,
@@ -232,7 +245,7 @@ public class WorkOrderService : IWorkOrderService
             PreviousStatus = WorkOrderStatus.Draft,
             NewStatus = workOrder.Status,
             ChangedById = creatorUserId,
-            Reason = "Work order manually created."
+            Reason = "Work order created with assigned technician."
         };
         await _context.Set<WorkOrderStatusHistory>().AddAsync(history);
 
@@ -243,7 +256,7 @@ public class WorkOrderService : IWorkOrderService
             "WorkOrderCreated",
             "WorkOrder",
             workOrder.Id.ToString(),
-            JsonSerializer.Serialize(new { workOrderNumber, workOrder.Status }),
+            JsonSerializer.Serialize(new { workOrderNumber, workOrder.Status, workOrder.RequestId, workOrder.TechnicianId }),
             "127.0.0.1");
 
         return await GetWorkOrderByIdAsync(workOrder.Id);
@@ -858,5 +871,51 @@ public class WorkOrderService : IWorkOrderService
                 UploadedAt = e.UploadedAt
             }).ToList()
         };
+    }
+
+    public async Task<List<MaintenanceRequestSummaryDto>> GetAvailableRequestsAsync()
+    {
+        return await _context.MaintenanceRequests
+            .Include(r => r.Location)
+            .Include(r => r.Category)
+            .Include(r => r.Requester)
+            .Where(r => r.Status != RequestStatus.Cancelled && r.Status != RequestStatus.Completed)
+            .OrderByDescending(r => r.CreatedAt)
+            .Select(r => new MaintenanceRequestSummaryDto
+            {
+                Id = r.Id,
+                RequestNumber = r.RequestNumber,
+                Title = r.Title,
+                Description = r.Description,
+                Status = r.Status.ToString(),
+                LocationId = r.LocationId,
+                LocationName = r.Location != null ? r.Location.Name : "Unassigned",
+                Building = r.Location != null ? r.Location.Building : string.Empty,
+                Priority = r.Category != null ? r.Category.DefaultPriority : "Medium",
+                CategoryId = r.CategoryId,
+                CategoryName = r.Category != null ? r.Category.Name : "General",
+                RequesterId = r.RequesterId,
+                RequesterName = r.Requester != null ? $"{r.Requester.FirstName} {r.Requester.LastName}" : "Unknown",
+                CreatedAt = r.CreatedAt
+            })
+            .ToListAsync();
+    }
+
+    public async Task<List<TechnicianSummaryDto>> GetTechniciansAsync()
+    {
+        return await _context.Technicians
+            .Include(t => t.User)
+            .Include(t => t.Skills)
+            .Select(t => new TechnicianSummaryDto
+            {
+                Id = t.Id,
+                UserId = t.UserId,
+                EmployeeId = t.EmployeeId,
+                Name = t.User != null ? $"{t.User.FirstName} {t.User.LastName}" : "Technician",
+                Specialization = t.Specialization,
+                IsAvailable = t.IsAvailable,
+                Skills = t.Skills.Select(s => s.Name).ToList()
+            })
+            .ToListAsync();
     }
 }

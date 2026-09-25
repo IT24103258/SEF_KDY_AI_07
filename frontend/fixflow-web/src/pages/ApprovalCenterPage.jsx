@@ -96,16 +96,31 @@ export const ApprovalCenterPage = () => {
   return (
     <div>
       <PageHeader
-        title="Manager Approval Center"
-        description="Human-in-the-loop review queue for AI-generated work order schedules & high-impact maintenance"
+        title="Approval Center"
+        description="Human-in-the-loop review queue for AI-generated work order schedules &amp; high-impact maintenance"
         action={
-          <Button
-            variant="secondary"
-            onClick={fetchPendingProposals}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-          >
-            <RefreshCw size={14} /> Refresh Queue ({proposals.length})
-          </Button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span
+              style={{
+                padding: '3px 10px',
+                borderRadius: 'var(--radius-pill)',
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                backgroundColor: 'rgba(251, 191, 36, 0.16)',
+                color: 'var(--warning-color)',
+                border: '1px solid var(--warning-color)'
+              }}
+            >
+              Pending ({proposals.length})
+            </span>
+            <Button
+              variant="secondary"
+              onClick={fetchPendingProposals}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            >
+              <RefreshCw size={14} /> Refresh
+            </Button>
+          </div>
         }
       />
 
@@ -258,27 +273,45 @@ export const ApprovalCenterPage = () => {
                     }}
                   >
                     <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', marginBottom: '8px' }}>
-                      Deterministic Verification
+                      Validation Checks
                     </div>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', fontSize: '0.8rem' }}>
-                      <span style={{ color: !isConflict ? 'var(--success-color)' : 'var(--danger-color)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        {!isConflict ? <Check size={14} /> : <X size={14} />} No Conflicts
-                      </span>
-                      <span style={{ color: 'var(--success-color)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Check size={14} /> Within SLA
-                      </span>
-                      <span style={{ color: 'var(--success-color)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Check size={14} /> Skill Match
-                      </span>
-                      <span style={{ color: 'var(--success-color)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Check size={14} /> Business Hours
-                      </span>
-                      <span style={{ color: 'var(--success-color)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Check size={14} /> Tech Available
-                      </span>
-                      <span style={{ color: 'var(--success-color)', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <Check size={14} /> Schema Valid
-                      </span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '0.8rem' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Technician availability:</span>
+                        <span style={{ color: 'var(--success-color)', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+                          <Check size={13} /> Valid
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Existing bookings checked:</span>
+                        <span style={{ color: 'var(--success-color)', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+                          <Check size={13} /> Valid
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>SLA requirement:</span>
+                        <span style={{ color: 'var(--success-color)', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+                          <Check size={13} /> Valid
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Schedule conflict:</span>
+                        <span style={{ color: !isConflict ? 'var(--success-color)' : 'var(--danger-color)', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+                          {!isConflict ? <Check size={13} /> : <X size={13} />} {!isConflict ? 'None' : 'Conflict'}
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Business hours:</span>
+                        <span style={{ color: 'var(--success-color)', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+                          <Check size={13} /> Valid
+                        </span>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ color: 'var(--text-secondary)' }}>Required skill:</span>
+                        <span style={{ color: 'var(--success-color)', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+                          <Check size={13} /> Valid
+                        </span>
+                      </div>
                     </div>
                   </div>
 

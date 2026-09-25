@@ -20,7 +20,16 @@ async function request(endpoint, options = {}) {
   const data = await response.json().catch(() => null);
 
   if (!response.ok) {
-    const errorMsg = data?.message || `HTTP error ${response.status}`;
+    let errorMsg = data?.message || data?.title;
+    if (data?.errors && typeof data.errors === 'object') {
+      const errorList = Object.values(data.errors).flat().filter(Boolean);
+      if (errorList.length > 0) {
+        errorMsg = errorList.join(' ');
+      }
+    }
+    if (!errorMsg) {
+      errorMsg = `HTTP error ${response.status}`;
+    }
     throw new Error(errorMsg);
   }
 

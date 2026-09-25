@@ -30,6 +30,8 @@ public interface IWorkOrderService
     Task<WorkOrderDto> CompleteWorkOrderAsync(Guid id, CompleteWorkOrderDto dto, Guid technicianUserId);
     Task<List<WorkOrderSummaryDto>> GetPendingApprovalsAsync();
     Task<List<WorkOrderSummaryDto>> GetTechnicianScheduleAsync(Guid technicianUserId, DateTime? filterDate = null);
+    Task<List<MaintenanceRequestSummaryDto>> GetAvailableRequestsAsync();
+    Task<List<TechnicianSummaryDto>> GetTechniciansAsync();
 }
 
 public interface ISchedulingService
