@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../screens/login_screen.dart';
-import '../../screens/home_screen.dart';
+import '../../screens/main_shell_screen.dart';
+
 import '../../screens/profile_screen.dart';
 import '../../screens/notifications_screen.dart';
-import '../../screens/technician_schedule_screen.dart';
 import '../../screens/job_details_screen.dart';
 import '../../screens/job_execution_screen.dart';
-import '../../screens/all_jobs_screen.dart';
+import '../../screens/digital_signature_screen.dart';
 
 /*
 ================================================================================
@@ -51,6 +51,7 @@ class AppRouter {
   static const String technicianSchedule = '/technician-schedule';
   static const String jobDetails = '/job-details';
   static const String jobExecution = '/job-execution';
+  static const String jobSignature = '/job-signature';
   static const String allJobs = '/all-jobs';
 
 
@@ -60,7 +61,7 @@ class AppRouter {
       case login:
         return MaterialPageRoute(builder: (_) => const LoginScreen());
       case home:
-        return MaterialPageRoute(builder: (_) => const HomeScreen());
+        return MaterialPageRoute(builder: (_) => const MainShellScreen());
       case profile:
         return MaterialPageRoute(builder: (_) => const ProfileScreen());
       case notifications:
@@ -91,15 +92,28 @@ class AppRouter {
       // MEMBER 4 ROUTE CASES — SCHEDULING & WORK ORDER MANAGEMENT
       // ============================================================
       case technicianSchedule:
-        return MaterialPageRoute(builder: (_) => const TechnicianScheduleScreen());
+        // Redirect to home shell which hosts the schedule as tab 0
+        return MaterialPageRoute(builder: (_) => const MainShellScreen(initialIndex: 0));
+      case allJobs:
+        // Redirect to home shell which hosts All Jobs as tab 1
+        return MaterialPageRoute(builder: (_) => const MainShellScreen(initialIndex: 1));
       case jobDetails:
         final id = settings.arguments as String? ?? '';
         return MaterialPageRoute(builder: (_) => JobDetailsScreen(workOrderId: id));
       case jobExecution:
         final id = settings.arguments as String? ?? '';
         return MaterialPageRoute(builder: (_) => JobExecutionScreen(workOrderId: id));
-      case allJobs:
-        return MaterialPageRoute(builder: (_) => const AllJobsScreen());
+      case jobSignature:
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        return MaterialPageRoute(
+          builder: (_) => DigitalSignatureScreen(
+            workOrderId: args['workOrderId'] as String? ?? '',
+            elapsedSeconds: args['elapsedSeconds'] as int? ?? 0,
+            photoCount: args['photoCount'] as int? ?? 0,
+            noteCount: args['noteCount'] as int? ?? 0,
+            uploadedFileKey: args['uploadedFileKey'] as String?,
+          ),
+        );
 
 
       default:

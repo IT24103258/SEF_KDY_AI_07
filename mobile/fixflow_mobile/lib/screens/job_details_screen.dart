@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../providers/work_order_provider.dart';
 import '../core/routes/app_router.dart';
+import '../core/theme/app_colors.dart';
+import '../providers/work_order_provider.dart';
+import '../widgets/add_note_modal.dart';
+import '../widgets/notes_list.dart';
+import '../widgets/priority_badge.dart';
+import '../widgets/status_badge.dart';
 
 class JobDetailsScreen extends StatefulWidget {
   final String workOrderId;
@@ -14,9 +19,6 @@ class JobDetailsScreen extends StatefulWidget {
 }
 
 class _JobDetailsScreenState extends State<JobDetailsScreen> {
-  final TextEditingController _noteController = TextEditingController();
-  bool _isAddingNote = false;
-
   @override
   void initState() {
     super.initState();
@@ -25,39 +27,46 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
     });
   }
 
-  @override
-  void dispose() {
-    _noteController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _handleAddNote() async {
-    final text = _noteController.text.trim();
-    if (text.isEmpty) return;
-
-    setState(() => _isAddingNote = true);
-    final success = await context.read<WorkOrderProvider>().addNote(widget.workOrderId, text);
-    setState(() => _isAddingNote = false);
-
-    if (success && mounted) {
-      _noteController.clear();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Note added successfully.')),
-      );
-    }
+  void _openAddNoteModal() {
+    AddNoteModal.show(
+      context,
+      onSave: (text) async {
+        return await context.read<WorkOrderProvider>().addNote(widget.workOrderId, text);
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<WorkOrderProvider>();
     final job = provider.currentJob;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final isCompleted = job?.status.toLowerCase() == 'completed';
+    final isInProgress = job?.status.toLowerCase() == 'inprogress';
+    final isScheduled = job?.status.toLowerCase() == 'scheduled' || job?.status.toLowerCase() == 'approved';
+
+    final scheduledDateStr = job?.scheduledStartTime != null
+        ? DateFormat('EEEE, MMMM d, yyyy').format(job!.scheduledStartTime!)
+        : 'Date not set';
+
+    final startTimeStr = job?.scheduledStartTime != null
+        ? DateFormat('hh:mm a').format(job!.scheduledStartTime!)
+        : '--:--';
+    final endTimeStr = job?.scheduledEndTime != null
+        ? DateFormat('hh:mm a').format(job!.scheduledEndTime!)
+        : '--:--';
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(job?.workOrderNumber ?? 'Job Details'),
+        title: Text(
+          job?.workOrderNumber.isNotEmpty == true ? job!.workOrderNumber : 'Job Details',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
+            tooltip: 'Refresh Job Details',
             onPressed: () => provider.fetchJobDetails(widget.workOrderId),
           ),
         ],
@@ -65,11 +74,268 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
       body: provider.isLoading && job == null
           ? const Center(child: CircularProgressIndicator())
           : job == null
-              ? const Center(child: Text('Work order not found.'))
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.search_off, size: 48, color: Colors.grey),
+                      const SizedBox(height: 12),
+                      const Text('Work order not found.', style: TextStyle(fontSize: 16)),
+                      const SizedBox(height: 12),
+                      ElevatedButton(
+                        onPressed: () => provider.fetchJobDetails(widget.workOrderId),
+                        child: const Text('Retry'),
+                      ),
+                    ],
+                  ),
+                )
               : ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
-                    // Status & Priority Banner
+                    // Top Overview Card
+                    Card(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                PriorityBadge(priority: job.priority),
+                                const SizedBox(width: 8),
+                                StatusBadge(status: job.status),
+                                const Spacer(),
+                                Text(
+                                  job.workOrderNumber,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              job.title,
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  Icons.location_on_outlined,
+                                  size: 16,
+                                  color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    job.formattedLocation,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Schedule Card
+                    Card(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: const [
+                                Icon(Icons.event_outlined, color: AppColors.primary, size: 18),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Schedule & Timing',
+                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 20),
+                            _buildDetailRow(
+                              label: 'Date',
+                              value: scheduledDateStr,
+                              isDark: isDark,
+                            ),
+                            const SizedBox(height: 10),
+                            _buildDetailRow(
+                              label: 'Scheduled Window',
+                              value: '$startTimeStr - $endTimeStr',
+                              isDark: isDark,
+                            ),
+                            const SizedBox(height: 10),
+                            _buildDetailRow(
+                              label: 'Estimated Duration',
+                              value: '${job.calculatedDurationMinutes} minutes',
+                              isDark: isDark,
+                            ),
+                            if (job.slaDeadline != null) ...[
+                              const SizedBox(height: 10),
+                              _buildDetailRow(
+                                label: 'SLA Target Deadline',
+                                value: DateFormat('MMM d, hh:mm a').format(job.slaDeadline!),
+                                isDark: isDark,
+                                valueColor: AppColors.high,
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Description Card
+                    Card(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: const [
+                                Icon(Icons.description_outlined, color: AppColors.primary, size: 18),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Issue Description',
+                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 20),
+                            Text(
+                              job.description.isNotEmpty
+                                  ? job.description
+                                  : 'No specific issue description provided.',
+                              style: TextStyle(
+                                fontSize: 14,
+                                height: 1.4,
+                                color: isDark ? AppColors.darkTextSecondary : const Color(0xFF334155),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Status History Card
+                    Card(
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: const [
+                                Icon(Icons.history_outlined, color: AppColors.primary, size: 18),
+                                SizedBox(width: 8),
+                                Text(
+                                  'Status History',
+                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 20),
+                            if (job.statusHistories.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                child: Text(
+                                  'Current status is ${job.status}. No previous transitions recorded.',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                  ),
+                                ),
+                              )
+                            else
+                              ListView.separated(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: job.statusHistories.length,
+                                separatorBuilder: (_, __) => const Divider(height: 16),
+                                itemBuilder: (context, index) {
+                                  final history = job.statusHistories[index];
+                                  return Row(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(4),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.getStatusBgColor(history.newStatus),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(
+                                          Icons.circle,
+                                          size: 8,
+                                          color: AppColors.getStatusColor(history.newStatus),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Text(
+                                                  '${history.previousStatus.isNotEmpty ? '${history.previousStatus} → ' : ''}${history.newStatus}',
+                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                                ),
+                                                Text(
+                                                  DateFormat('MMM d, hh:mm a').format(history.timestamp),
+                                                  style: TextStyle(
+                                                    fontSize: 11,
+                                                    color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            if (history.reason.isNotEmpty) ...[
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                history.reason,
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                                                ),
+                                              ),
+                                            ],
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Field Notes Card
                     Card(
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       child: Padding(
@@ -80,237 +346,142 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Text(
-                                  job.workOrderNumber,
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 16,
-                                    color: Theme.of(context).primaryColor,
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: job.status.toLowerCase() == 'inprogress'
-                                        ? Colors.blue.shade50
-                                        : job.status.toLowerCase() == 'completed'
-                                            ? Colors.green.shade50
-                                            : Colors.orange.shade50,
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  child: Text(
-                                    job.status,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                      color: job.status.toLowerCase() == 'inprogress'
-                                          ? Colors.blue.shade700
-                                          : job.status.toLowerCase() == 'completed'
-                                              ? Colors.green.shade700
-                                              : Colors.orange.shade700,
+                                Row(
+                                  children: const [
+                                    Icon(Icons.speaker_notes_outlined, color: AppColors.primary, size: 18),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Field Notes',
+                                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                                     ),
-                                  ),
+                                  ],
+                                ),
+                                TextButton.icon(
+                                  onPressed: _openAddNoteModal,
+                                  icon: const Icon(Icons.add, size: 16),
+                                  label: const Text('Add Note', style: TextStyle(fontSize: 12)),
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 10),
-                            Text(
-                              job.title,
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              job.description,
-                              style: TextStyle(fontSize: 14, color: Colors.grey[700]),
-                            ),
+                            const Divider(height: 14),
+                            NotesList(notes: job.notes),
                           ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 16),
-
-                    // Operational Details
-                    Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Location & Schedule',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                            ),
-                            const Divider(height: 20),
-                            _buildInfoRow(
-                              Icons.location_on_outlined,
-                              'Location',
-                              '${job.locationName} (${job.building}, ${job.room})',
-                            ),
-                            const SizedBox(height: 12),
-                            _buildInfoRow(
-                              Icons.access_time,
-                              'Scheduled Time',
-                              job.scheduledStartTime != null
-                                  ? '${DateFormat('MMM d, hh:mm a').format(job.scheduledStartTime!)} - ${job.scheduledEndTime != null ? DateFormat('hh:mm a').format(job.scheduledEndTime!) : ''}'
-                                  : 'Not scheduled',
-                            ),
-                            const SizedBox(height: 12),
-                            _buildInfoRow(
-                              Icons.timer_outlined,
-                              'Estimated Duration',
-                              '${job.estimatedDurationMinutes} minutes',
-                            ),
-                            if (job.slaDeadline != null) ...[
-                              const SizedBox(height: 12),
-                              _buildInfoRow(
-                                Icons.alarm,
-                                'SLA Target',
-                                DateFormat('MMM d, hh:mm a').format(job.slaDeadline!),
-                                color: Colors.orange.shade700,
-                              ),
-                            ],
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Field Notes Section
-                    Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Field Work Notes',
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: TextField(
-                                    controller: _noteController,
-                                    decoration: InputDecoration(
-                                      hintText: 'Add field note...',
-                                      isDense: true,
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                ElevatedButton(
-                                  onPressed: _isAddingNote ? null : _handleAddNote,
-                                  style: ElevatedButton.styleFrom(
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  ),
-                                  child: _isAddingNote
-                                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                                      : const Icon(Icons.send, size: 16),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 12),
-                            if (job.notes.isEmpty)
-                              Text('No notes recorded yet.', style: TextStyle(color: Colors.grey[500], fontSize: 13))
-                            else
-                              ...job.notes.map((n) => Container(
-                                    margin: const EdgeInsets.only(bottom: 8),
-                                    padding: const EdgeInsets.all(10),
-                                    decoration: BoxDecoration(
-                                      color: Colors.grey.shade50,
-                                      borderRadius: BorderRadius.circular(8),
-                                      border: Border.all(color: Colors.grey.shade200),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Text(n.authorName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                                            Text(DateFormat('hh:mm a').format(n.timestamp), style: TextStyle(color: Colors.grey[600], fontSize: 11)),
-                                          ],
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(n.noteText, style: const TextStyle(fontSize: 13)),
-                                      ],
-                                    ),
-                                  )),
-                          ],
-                        ),
-                      ),
-                    ),
+                    const SizedBox(height: 24),
                   ],
                 ),
-      bottomNavigationBar: job != null && job.status.toLowerCase() != 'completed'
+      bottomNavigationBar: job != null
           ? Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Theme.of(context).cardColor,
+                color: isDark ? AppColors.darkCard : Colors.white,
+                border: Border(
+                  top: BorderSide(
+                    color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                    width: 1,
+                  ),
+                ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.08),
-                    blurRadius: 6,
+                    color: Colors.black.withOpacity(0.06),
+                    blurRadius: 8,
                     offset: const Offset(0, -2),
                   ),
                 ],
               ),
-              child: job.status.toLowerCase() == 'inprogress'
-                  ? ElevatedButton.icon(
-                      icon: const Icon(Icons.check_circle_outline),
-                      label: const Text('Proceed to Execution & Sign-off'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        backgroundColor: Colors.green.shade600,
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: () {
-                        Navigator.pushNamed(
-                          context,
-                          AppRouter.jobExecution,
-                          arguments: job.id,
-                        );
-                      },
-                    )
-                  : ElevatedButton.icon(
-                      icon: const Icon(Icons.play_arrow),
-                      label: const Text('Start Job Execution'),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                      onPressed: () async {
-                        final messenger = ScaffoldMessenger.of(context);
-                        final success = await provider.startJob(job.id);
-                        if (success && mounted) {
-                          messenger.showSnackBar(
-                            const SnackBar(content: Text('Job started. Status changed to In Progress.')),
-                          );
-                        }
-                      },
-                    ),
+              child: SafeArea(
+                child: SizedBox(
+                  height: 48,
+                  child: isCompleted
+                      ? OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.pushNamed(
+                              context,
+                              AppRouter.jobExecution,
+                              arguments: job.id,
+                            );
+                          },
+                          icon: const Icon(Icons.visibility_outlined, size: 18),
+                          label: const Text('View Execution & Completion Evidence'),
+                        )
+                      : isInProgress
+                          ? ElevatedButton.icon(
+                              onPressed: () {
+                                Navigator.pushNamed(
+                                  context,
+                                  AppRouter.jobExecution,
+                                  arguments: job.id,
+                                );
+                              },
+                              icon: const Icon(Icons.play_arrow, size: 18),
+                              label: const Text('Continue Job Execution'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.inProgress,
+                                foregroundColor: Colors.white,
+                              ),
+                            )
+                          : isScheduled
+                              ? ElevatedButton.icon(
+                                  onPressed: () async {
+                                    final nav = Navigator.of(context);
+                                    final success = await provider.startJob(job.id);
+                                    if (success && mounted) {
+                                      nav.pushNamed(
+                                        AppRouter.jobExecution,
+                                        arguments: job.id,
+                                      );
+                                    }
+                                  },
+                                  icon: const Icon(Icons.play_arrow_outlined, size: 18),
+                                  label: const Text('Start Job'),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppColors.primary,
+                                    foregroundColor: Colors.white,
+                                  ),
+                                )
+                              : ElevatedButton.icon(
+                                  onPressed: () {
+                                    Navigator.pushNamed(
+                                      context,
+                                      AppRouter.jobExecution,
+                                      arguments: job.id,
+                                    );
+                                  },
+                                  icon: const Icon(Icons.arrow_forward, size: 18),
+                                  label: const Text('Open Job Workspace'),
+                                ),
+                ),
+              ),
             )
           : null,
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value, {Color? color}) {
+  Widget _buildDetailRow({
+    required String label,
+    required String value,
+    required bool isDark,
+    Color? valueColor,
+  }) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        Icon(icon, size: 18, color: color ?? Colors.grey[600]),
-        const SizedBox(width: 8),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-            Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: color)),
-          ],
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: valueColor ?? (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary),
+          ),
         ),
       ],
     );

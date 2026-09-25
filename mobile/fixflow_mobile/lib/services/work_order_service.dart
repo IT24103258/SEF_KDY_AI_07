@@ -30,12 +30,28 @@ class WorkOrderService {
     return null;
   }
 
-  // Get all assigned jobs with status filter
-  Future<List<WorkOrderModel>> getAllJobs({String? status}) async {
-    String endpoint = '/work-orders';
+  // Get all assigned jobs with status, search, and priority filter
+  Future<List<WorkOrderModel>> getAllJobs({
+    String? status,
+    String? search,
+    String? priority,
+    int page = 1,
+    int pageSize = 50,
+  }) async {
+    final queryParams = <String>[];
+    queryParams.add('page=$page');
+    queryParams.add('pageSize=$pageSize');
     if (status != null && status.isNotEmpty) {
-      endpoint += '?status=$status';
+      queryParams.add('status=$status');
     }
+    if (search != null && search.isNotEmpty) {
+      queryParams.add('search=${Uri.encodeComponent(search)}');
+    }
+    if (priority != null && priority.isNotEmpty) {
+      queryParams.add('priority=$priority');
+    }
+
+    final endpoint = '/work-orders?${queryParams.join('&')}';
 
     final res = await _apiClient.get(endpoint);
     if (res['success'] == true && res['data'] != null && res['data']['items'] != null) {
@@ -65,6 +81,22 @@ class WorkOrderService {
     return res['success'] == true;
   }
 
+  // Upload photo evidence
+  Future<String?> uploadPhoto(String workOrderId, List<int> fileBytes, String filename) async {
+    try {
+      final res = await _apiClient.uploadMultipart(
+        '/work-orders/$workOrderId/evidence/photo',
+        fileBytes: fileBytes,
+        filename: filename,
+        fieldName: 'file',
+      );
+      if (res['success'] == true && res['data'] != null) {
+        return res['data'].toString();
+      }
+    } catch (_) {}
+    return null;
+  }
+
   // Submit completion evidence with customer signature
   Future<WorkOrderModel?> completeWorkOrder(
     String id, {
@@ -72,12 +104,14 @@ class WorkOrderService {
     required String signatureDataUrl,
     String? completionNotes,
     String? photoFileKey,
+    String? photoOriginalFileName,
   }) async {
     final res = await _apiClient.post('/work-orders/$id/complete', {
       'signerName': signerName,
       'signatureDataUrl': signatureDataUrl,
       'completionNotes': completionNotes ?? 'Completed and signed on mobile.',
       'photoFileKey': photoFileKey,
+      'photoOriginalFileName': photoOriginalFileName,
     });
     if (res['success'] == true && res['data'] != null) {
       return WorkOrderModel.fromJson(res['data']);

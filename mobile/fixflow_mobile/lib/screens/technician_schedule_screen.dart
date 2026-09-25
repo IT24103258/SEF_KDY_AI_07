@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../providers/work_order_provider.dart';
-import '../models/work_order_model.dart';
 import '../core/routes/app_router.dart';
+import '../core/theme/app_colors.dart';
+import '../models/work_order_model.dart';
+import '../providers/work_order_provider.dart';
+import '../widgets/app_top_bar.dart';
+import '../widgets/date_section_header.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/job_card.dart';
 
 class TechnicianScheduleScreen extends StatefulWidget {
   const TechnicianScheduleScreen({super.key});
@@ -23,298 +28,186 @@ class _TechnicianScheduleScreenState extends State<TechnicianScheduleScreen> {
     });
   }
 
+  void _onSelectDate(DateTime date) {
+    setState(() {
+      _selectedDate = date;
+    });
+    context.read<WorkOrderProvider>().setSelectedDate(date);
+  }
+
+  Map<DateTime, List<WorkOrderModel>> _groupJobsByDate(List<WorkOrderModel> jobs) {
+    final Map<DateTime, List<WorkOrderModel>> grouped = {};
+
+    for (final job in jobs) {
+      final date = job.scheduledStartTime != null
+          ? DateTime(job.scheduledStartTime!.year, job.scheduledStartTime!.month, job.scheduledStartTime!.day)
+          : DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+
+      if (!grouped.containsKey(date)) {
+        grouped[date] = [];
+      }
+      grouped[date]!.add(job);
+    }
+
+    // Sort jobs within each group chronologically
+    for (final date in grouped.keys) {
+      grouped[date]!.sort((a, b) {
+        if (a.scheduledStartTime == null) return 1;
+        if (b.scheduledStartTime == null) return -1;
+        return a.scheduledStartTime!.compareTo(b.scheduledStartTime!);
+      });
+    }
+
+    return grouped;
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<WorkOrderProvider>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final groupedJobs = _groupJobsByDate(provider.scheduleJobs);
+    final sortedDates = groupedJobs.keys.toList()..sort((a, b) => a.compareTo(b));
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('My Daily Schedule'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.list_alt),
-            tooltip: 'All Assigned Jobs',
-            onPressed: () {
-              Navigator.pushNamed(context, AppRouter.allJobs);
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () => provider.fetchSchedule(filterDate: _selectedDate),
-          ),
-        ],
+      appBar: AppTopBar(
+        title: 'My Schedule',
+        onRefresh: () => provider.fetchSchedule(filterDate: _selectedDate),
       ),
-      body: Column(
-        children: [
-          // Horizontal Day Selector Bar
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).cardColor,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
+      body: RefreshIndicator(
+        onRefresh: () => provider.fetchSchedule(filterDate: _selectedDate),
+        child: Column(
+          children: [
+            // Horizontal Day Selector Bar
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkCard : Colors.white,
+                border: Border(
+                  bottom: BorderSide(
+                    color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                    width: 1,
+                  ),
                 ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: List.generate(7, (index) {
-                final date = DateTime.now().add(Duration(days: index - 2));
-                final isSelected = date.day == _selectedDate.day &&
-                    date.month == _selectedDate.month &&
-                    date.year == _selectedDate.year;
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: List.generate(7, (index) {
+                  final date = DateTime.now().add(Duration(days: index - 2));
+                  final isSelected = date.day == _selectedDate.day &&
+                      date.month == _selectedDate.month &&
+                      date.year == _selectedDate.year;
 
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedDate = date;
-                    });
-                    provider.setSelectedDate(date);
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                    decoration: BoxDecoration(
-                      color: isSelected ? Theme.of(context).primaryColor : Colors.transparent,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          DateFormat('E').format(date),
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: isSelected ? Colors.white : Colors.grey,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          DateFormat('d').format(date),
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.bold,
-                            color: isSelected ? Colors.white : null,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
-            ),
-          ),
-
-          // Job list
-          Expanded(
-            child: provider.isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : provider.error != null
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(Icons.error_outline, color: Colors.red, size: 40),
-                            const SizedBox(height: 8),
-                            Text(provider.error!, style: const TextStyle(color: Colors.red)),
-                            const SizedBox(height: 12),
-                            ElevatedButton(
-                              onPressed: () => provider.fetchSchedule(filterDate: _selectedDate),
-                              child: const Text('Retry'),
-                            ),
-                          ],
-                        ),
-                      )
-                    : provider.scheduleJobs.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(Icons.event_available, size: 48, color: Colors.grey[400]),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'No scheduled jobs for ${DateFormat('EEE, MMM d').format(_selectedDate)}',
-                                  style: TextStyle(color: Colors.grey[600]),
-                                ),
-                              ],
-                            ),
-                          )
-                        : ListView.builder(
-                            padding: const EdgeInsets.all(12),
-                            itemCount: provider.scheduleJobs.length,
-                            itemBuilder: (context, index) {
-                              final job = provider.scheduleJobs[index];
-                              return _buildJobCard(context, job);
-                            },
-                          ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildJobCard(BuildContext context, WorkOrderModel job) {
-    final isCritical = job.priority.toLowerCase() == 'critical';
-    final isHigh = job.priority.toLowerCase() == 'high';
-    final hasConflict = job.conflictDetected;
-
-    final startStr = job.scheduledStartTime != null
-        ? DateFormat('hh:mm a').format(job.scheduledStartTime!)
-        : '09:00 AM';
-    final endStr = job.scheduledEndTime != null
-        ? DateFormat('hh:mm a').format(job.scheduledEndTime!)
-        : '11:00 AM';
-
-    return Card(
-      margin: const EdgeInsets.only(bottom: 12),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-        side: BorderSide(
-          color: hasConflict
-              ? Colors.red
-              : isCritical
-                  ? Colors.red.shade300
-                  : isHigh
-                      ? Colors.orange.shade300
-                      : Colors.grey.shade200,
-          width: hasConflict ? 1.5 : 1.0,
-        ),
-      ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-        onTap: () {
-          Navigator.pushNamed(
-            context,
-            AppRouter.jobDetails,
-            arguments: job.id,
-          );
-        },
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        job.workOrderNumber,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).primaryColor,
-                        ),
+                  return GestureDetector(
+                    onTap: () => _onSelectDate(date),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: isSelected ? AppColors.primary : Colors.transparent,
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      if (hasConflict) ...[
-                        const SizedBox(width: 6),
-                        const Icon(Icons.warning_amber_rounded, color: Colors.red, size: 16),
-                      ],
-                    ],
-                  ),
-                  _buildStatusChip(job.status),
-                ],
-              ),
-              const SizedBox(height: 8),
-
-              // Title
-              Text(
-                job.title,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 6),
-
-              // Location
-              Row(
-                children: [
-                  const Icon(Icons.location_on_outlined, size: 14, color: Colors.grey),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      '${job.locationName} (${job.building}, ${job.room})',
-                      style: TextStyle(fontSize: 12, color: Colors.grey[600]),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-
-              // Time & Priority
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      const Icon(Icons.access_time, size: 14, color: Colors.grey),
-                      const SizedBox(width: 4),
-                      Text(
-                        '$startStr - $endStr (${job.estimatedDurationMinutes}m)',
-                        style: TextStyle(fontSize: 12, color: Colors.grey[700], fontWeight: FontWeight.w500),
+                      child: Column(
+                        children: [
+                          Text(
+                            DateFormat('E').format(date).toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: isSelected
+                                  ? Colors.white
+                                  : (isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted),
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            DateFormat('d').format(date),
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: isSelected
+                                  ? Colors.white
+                                  : (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-                  _buildPriorityTag(job.priority),
-                ],
+                    ),
+                  );
+                }),
               ),
-            ],
-          ),
+            ),
+
+            // Job List or States
+            Expanded(
+              child: provider.isLoading && provider.scheduleJobs.isEmpty
+                  ? const Center(child: CircularProgressIndicator())
+                  : provider.error != null
+                      ? EmptyState(
+                          icon: Icons.error_outline,
+                          title: 'Unable to Load Schedule',
+                          message: provider.error!,
+                          retryButtonText: 'Retry Schedule',
+                          onRetry: () => provider.fetchSchedule(filterDate: _selectedDate),
+                        )
+                      : provider.scheduleJobs.isEmpty
+                          ? EmptyState(
+                              icon: Icons.event_available_outlined,
+                              title: 'No jobs scheduled',
+                              message: 'You have no maintenance jobs scheduled for ${DateFormat('EEEE, MMM d').format(_selectedDate)}.',
+                              retryButtonText: 'Refresh Schedule',
+                              onRetry: () => provider.fetchSchedule(filterDate: _selectedDate),
+                            )
+                          : ListView.builder(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              itemCount: sortedDates.length,
+                              itemBuilder: (context, dateIndex) {
+                                final date = sortedDates[dateIndex];
+                                final dateJobs = groupedJobs[date] ?? [];
+
+                                return Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    DateSectionHeader(
+                                      date: date,
+                                      count: dateJobs.length,
+                                    ),
+                                    ...dateJobs.map((job) {
+                                      return JobCard(
+                                        job: job,
+                                        onDetails: () {
+                                          Navigator.pushNamed(
+                                            context,
+                                            AppRouter.jobDetails,
+                                            arguments: job.id,
+                                          );
+                                        },
+                                        onStart: () async {
+                                          if (job.status.toLowerCase() == 'inprogress') {
+                                            Navigator.pushNamed(
+                                              context,
+                                              AppRouter.jobExecution,
+                                              arguments: job.id,
+                                            );
+                                          } else {
+                                            final success = await provider.startJob(job.id);
+                                            if (success && context.mounted) {
+                                              Navigator.pushNamed(
+                                                context,
+                                                AppRouter.jobExecution,
+                                                arguments: job.id,
+                                              );
+                                            }
+                                          }
+                                        },
+                                      );
+                                    }),
+                                  ],
+                                );
+                              },
+                            ),
+            ),
+          ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildStatusChip(String status) {
-    Color bg = Colors.grey.shade100;
-    Color fg = Colors.grey.shade800;
-
-    switch (status.toLowerCase()) {
-      case 'completed':
-        bg = Colors.green.shade50;
-        fg = Colors.green.shade700;
-        break;
-      case 'inprogress':
-        bg = Colors.blue.shade50;
-        fg = Colors.blue.shade700;
-        break;
-      case 'scheduled':
-      case 'approved':
-        bg = Colors.orange.shade50;
-        fg = Colors.orange.shade700;
-        break;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-      decoration: BoxDecoration(
-        color: bg,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        status,
-        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: fg),
-      ),
-    );
-  }
-
-  Widget _buildPriorityTag(String priority) {
-    Color color = Colors.blue;
-    if (priority.toLowerCase() == 'critical') color = Colors.red;
-    if (priority.toLowerCase() == 'high') color = Colors.orange;
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: color.withOpacity(0.4)),
-      ),
-      child: Text(
-        priority,
-        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: color),
       ),
     );
   }
