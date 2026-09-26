@@ -57,7 +57,7 @@ public class WorkOrderTests
             RequestNumber = "REQ-2026-0001",
             Title = "Ceiling Light Short Circuit",
             Description = "Bathroom light sparked and tripped breaker.",
-            Status = RequestStatus.Matched,
+            Status = RequestStatus.Approved,
             LocationId = loc.Id,
             RequesterId = requester.Id
         };
