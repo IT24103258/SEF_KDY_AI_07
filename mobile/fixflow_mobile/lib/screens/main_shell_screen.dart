@@ -55,9 +55,11 @@ class _MainShellScreenState extends State<MainShellScreen> {
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
           onTap: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
+            if (index == _currentIndex) return;
+            Navigator.pushReplacementNamed(
+              context,
+              index == 0 ? '/' : '/jobs',
+            );
           },
           items: const [
             BottomNavigationBarItem(
@@ -66,9 +68,9 @@ class _MainShellScreenState extends State<MainShellScreen> {
               label: 'Schedule',
             ),
             BottomNavigationBarItem(
-              icon: Icon(Icons.assignment_outlined),
-              activeIcon: Icon(Icons.assignment),
-              label: 'All Jobs',
+              icon: Icon(Icons.handyman_outlined),
+              activeIcon: Icon(Icons.handyman),
+              label: 'Jobs',
             ),
           ],
         ),

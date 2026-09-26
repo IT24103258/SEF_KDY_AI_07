@@ -1,6 +1,6 @@
-import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../core/theme/app_colors.dart';
 import 'photo_thumbnail.dart';
 
@@ -24,8 +24,8 @@ class PhotoItem {
 
 class PhotoUpload extends StatefulWidget {
   final List<PhotoItem> photos;
-  final Function(PhotoItem item)? onAddPhoto;
-  final Function(String id)? onRemovePhoto;
+  final ValueChanged<PhotoItem>? onAddPhoto;
+  final ValueChanged<String>? onRemovePhoto;
   final Future<String?> Function(PhotoItem item)? onUploadPhoto;
 
   const PhotoUpload({
@@ -37,88 +37,101 @@ class PhotoUpload extends StatefulWidget {
   });
 
   @override
-  State<PhotoUpload> createState() => _PhotoUploadState();
+  State<PhotoUpload> createState() => PhotoUploadState();
 }
 
-class _PhotoUploadState extends State<PhotoUpload> {
-  // Minimal valid 1x1 PNG bytes for simulation / device fallback
-  static final Uint8List _samplePng = base64Decode(
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
-  );
+class PhotoUploadState extends State<PhotoUpload> {
+  final ImagePicker _imagePicker = ImagePicker();
 
-  void _showImageSourceDialog() {
+  void showImageSourceDialog() {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: AppColors.primaryAccent,
-                    child: Icon(Icons.camera_alt, color: AppColors.primary),
-                  ),
-                  title: const Text('Take Photo (Camera)', style: TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Capture repair/after photo with device camera'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _handleCapturePhoto('camera');
-                  },
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppColors.primaryAccent,
+                  child:
+                      Icon(Icons.camera_alt_outlined, color: AppColors.primary),
                 ),
-                const Divider(),
-                ListTile(
-                  leading: const CircleAvatar(
-                    backgroundColor: AppColors.primaryAccent,
-                    child: Icon(Icons.photo_library, color: AppColors.primary),
-                  ),
-                  title: const Text('Choose from Gallery', style: TextStyle(fontWeight: FontWeight.w600)),
-                  subtitle: const Text('Select existing evidence photo'),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _handleCapturePhoto('gallery');
-                  },
+                title: const Text('Take photo'),
+                subtitle: const Text('Capture repair or completion evidence'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickPhoto(ImageSource.camera);
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: AppColors.primaryAccent,
+                  child: Icon(Icons.photo_library_outlined,
+                      color: AppColors.primary),
                 ),
-              ],
-            ),
+                title: const Text('Choose from gallery'),
+                subtitle: const Text('Select existing completion evidence'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _pickPhoto(ImageSource.gallery);
+                },
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
-  void _handleCapturePhoto(String source) async {
-    final timestamp = DateTime.now().millisecondsSinceEpoch;
-    final fileName = 'evidence_${source}_$timestamp.jpg';
+  Future<void> _pickPhoto(ImageSource source) async {
+    try {
+      final image = await _imagePicker.pickImage(source: source);
+      if (image == null) return;
 
-    final newItem = PhotoItem(
-      id: timestamp.toString(),
-      name: fileName,
-      bytes: _samplePng,
-      isUploading: false,
-      isUploaded: false,
-    );
+      final bytes = await image.readAsBytes();
+      if (bytes.isEmpty) return;
 
-    widget.onAddPhoto?.call(newItem);
+      final item = PhotoItem(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        name: image.name,
+        bytes: bytes,
+      );
+      widget.onAddPhoto?.call(item);
 
-    if (widget.onUploadPhoto != null) {
-      setState(() => newItem.isUploading = true);
-      final key = await widget.onUploadPhoto!(newItem);
-      if (mounted) {
-        setState(() {
-          newItem.isUploading = false;
-          if (key != null) {
-            newItem.isUploaded = true;
-            newItem.fileKey = key;
-          }
-        });
-      }
+      if (widget.onUploadPhoto == null) return;
+      if (mounted) setState(() => item.isUploading = true);
+      final fileKey = await widget.onUploadPhoto!(item);
+      if (!mounted) return;
+      setState(() {
+        item.isUploading = false;
+        item.isUploaded = fileKey != null;
+        item.fileKey = fileKey;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Unable to select this photo. Please try again.')),
+      );
     }
+  }
+
+  Future<void> _retryUpload(PhotoItem photo) async {
+    if (widget.onUploadPhoto == null) return;
+    setState(() => photo.isUploading = true);
+    final fileKey = await widget.onUploadPhoto!(photo);
+    if (!mounted) return;
+    setState(() {
+      photo.isUploading = false;
+      photo.isUploaded = fileKey != null;
+      photo.fileKey = fileKey;
+    });
   }
 
   @override
@@ -132,22 +145,23 @@ class _PhotoUploadState extends State<PhotoUpload> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(
-              'Evidence & Work Photos (${widget.photos.length})',
+              'Photos (${widget.photos.length})',
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.bold,
-                color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
+                color: isDark
+                    ? AppColors.darkTextPrimary
+                    : AppColors.lightTextPrimary,
               ),
             ),
             TextButton.icon(
-              onPressed: _showImageSourceDialog,
-              icon: const Icon(Icons.add_a_photo, size: 16),
-              label: const Text('Add Photo', style: TextStyle(fontSize: 12)),
+              onPressed: showImageSourceDialog,
+              icon: const Icon(Icons.add_a_photo_outlined, size: 16),
+              label: const Text('Add photo', style: TextStyle(fontSize: 12)),
             ),
           ],
         ),
         const SizedBox(height: 8),
-
         if (widget.photos.isEmpty)
           Container(
             width: double.infinity,
@@ -157,29 +171,33 @@ class _PhotoUploadState extends State<PhotoUpload> {
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
                 color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-                style: BorderStyle.solid,
               ),
             ),
             child: Column(
               children: [
                 Icon(
-                  Icons.camera_enhance_outlined,
+                  Icons.image_outlined,
                   size: 32,
-                  color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                  color: isDark
+                      ? AppColors.darkTextMuted
+                      : AppColors.lightTextMuted,
                 ),
                 const SizedBox(height: 6),
                 Text(
                   'No completion photos attached yet',
                   style: TextStyle(
                     fontSize: 12,
-                    color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                    color: isDark
+                        ? AppColors.darkTextSecondary
+                        : AppColors.lightTextSecondary,
                   ),
                 ),
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
-                  onPressed: _showImageSourceDialog,
-                  icon: const Icon(Icons.camera_alt, size: 14),
-                  label: const Text('Capture After Photo', style: TextStyle(fontSize: 12)),
+                  onPressed: showImageSourceDialog,
+                  icon: const Icon(Icons.camera_alt_outlined, size: 14),
+                  label:
+                      const Text('Add photo', style: TextStyle(fontSize: 12)),
                 ),
               ],
             ),
@@ -194,24 +212,31 @@ class _PhotoUploadState extends State<PhotoUpload> {
               itemBuilder: (context, index) {
                 if (index == widget.photos.length) {
                   return InkWell(
-                    onTap: _showImageSourceDialog,
+                    onTap: showImageSourceDialog,
                     borderRadius: BorderRadius.circular(8),
                     child: Container(
                       width: 100,
                       height: 100,
                       decoration: BoxDecoration(
-                        color: isDark ? AppColors.darkCard : const Color(0xFFF1F5F9),
+                        color: isDark
+                            ? AppColors.darkCard
+                            : const Color(0xFFF1F5F9),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
-                          color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                          color: isDark
+                              ? AppColors.darkBorder
+                              : AppColors.lightBorder,
                         ),
                       ),
-                      child: Column(
+                      child: const Column(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.add, color: AppColors.primary, size: 28),
+                        children: [
+                          Icon(Icons.add_a_photo_outlined,
+                              color: AppColors.primary, size: 28),
                           SizedBox(height: 4),
-                          Text('Add More', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                          Text('Add photo',
+                              style: TextStyle(
+                                  fontSize: 11, fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
@@ -225,21 +250,7 @@ class _PhotoUploadState extends State<PhotoUpload> {
                   isUploading: photo.isUploading,
                   isUploaded: photo.isUploaded,
                   onRemove: () => widget.onRemovePhoto?.call(photo.id),
-                  onRetry: () async {
-                    if (widget.onUploadPhoto != null) {
-                      setState(() => photo.isUploading = true);
-                      final key = await widget.onUploadPhoto!(photo);
-                      if (mounted) {
-                        setState(() {
-                          photo.isUploading = false;
-                          if (key != null) {
-                            photo.isUploaded = true;
-                            photo.fileKey = key;
-                          }
-                        });
-                      }
-                    }
-                  },
+                  onRetry: () => _retryUpload(photo),
                 );
               },
             ),

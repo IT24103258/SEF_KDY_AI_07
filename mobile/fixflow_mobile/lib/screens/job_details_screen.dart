@@ -31,7 +31,9 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
     AddNoteModal.show(
       context,
       onSave: (text) async {
-        return await context.read<WorkOrderProvider>().addNote(widget.workOrderId, text);
+        return await context
+            .read<WorkOrderProvider>()
+            .addNote(widget.workOrderId, text);
       },
     );
   }
@@ -39,12 +41,15 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<WorkOrderProvider>();
-    final job = provider.currentJob;
+    final job = provider.currentJob?.id == widget.workOrderId
+        ? provider.currentJob
+        : null;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final isCompleted = job?.status.toLowerCase() == 'completed';
     final isInProgress = job?.status.toLowerCase() == 'inprogress';
-    final isScheduled = job?.status.toLowerCase() == 'scheduled' || job?.status.toLowerCase() == 'approved';
+    final isScheduled = job?.status.toLowerCase() == 'scheduled' ||
+        job?.status.toLowerCase() == 'approved';
 
     final scheduledDateStr = job?.scheduledStartTime != null
         ? DateFormat('EEEE, MMMM d, yyyy').format(job!.scheduledStartTime!)
@@ -59,8 +64,21 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Back',
+          onPressed: () {
+            if (Navigator.canPop(context)) {
+              Navigator.pop(context);
+            } else {
+              Navigator.pushReplacementNamed(context, AppRouter.allJobs);
+            }
+          },
+        ),
         title: Text(
-          job?.workOrderNumber.isNotEmpty == true ? job!.workOrderNumber : 'Job Details',
+          job?.workOrderNumber.isNotEmpty == true
+              ? job!.workOrderNumber
+              : 'Job Details',
           style: const TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
@@ -78,12 +96,15 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.search_off, size: 48, color: Colors.grey),
+                      const Icon(Icons.search_off,
+                          size: 48, color: Colors.grey),
                       const SizedBox(height: 12),
-                      const Text('Work order not found.', style: TextStyle(fontSize: 16)),
+                      const Text('Work order not found.',
+                          style: TextStyle(fontSize: 16)),
                       const SizedBox(height: 12),
                       ElevatedButton(
-                        onPressed: () => provider.fetchJobDetails(widget.workOrderId),
+                        onPressed: () =>
+                            provider.fetchJobDetails(widget.workOrderId),
                         child: const Text('Retry'),
                       ),
                     ],
@@ -94,7 +115,8 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                   children: [
                     // Top Overview Card
                     Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -111,7 +133,9 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.w700,
-                                    color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                    color: isDark
+                                        ? AppColors.darkTextMuted
+                                        : AppColors.lightTextMuted,
                                   ),
                                 ),
                               ],
@@ -122,7 +146,9 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                               style: TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
-                                color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
+                                color: isDark
+                                    ? AppColors.darkTextPrimary
+                                    : AppColors.lightTextPrimary,
                               ),
                             ),
                             const SizedBox(height: 10),
@@ -132,7 +158,9 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                                 Icon(
                                   Icons.location_on_outlined,
                                   size: 16,
-                                  color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                  color: isDark
+                                      ? AppColors.darkTextMuted
+                                      : AppColors.lightTextMuted,
                                 ),
                                 const SizedBox(width: 6),
                                 Expanded(
@@ -140,7 +168,9 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                                     job.formattedLocation,
                                     style: TextStyle(
                                       fontSize: 13,
-                                      color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                                      color: isDark
+                                          ? AppColors.darkTextSecondary
+                                          : AppColors.lightTextSecondary,
                                     ),
                                   ),
                                 ),
@@ -154,7 +184,8 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
                     // Schedule Card
                     Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -162,11 +193,14 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                           children: [
                             Row(
                               children: const [
-                                Icon(Icons.event_outlined, color: AppColors.primary, size: 18),
+                                Icon(Icons.event_outlined,
+                                    color: AppColors.primary, size: 18),
                                 SizedBox(width: 8),
                                 Text(
-                                  'Schedule & Timing',
-                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                  'Schedule',
+                                  style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold),
                                 ),
                               ],
                             ),
@@ -185,14 +219,17 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                             const SizedBox(height: 10),
                             _buildDetailRow(
                               label: 'Estimated Duration',
-                              value: '${job.calculatedDurationMinutes} minutes',
+                              value: job.estimatedDurationMinutes > 0
+                                  ? '${job.estimatedDurationMinutes} minutes'
+                                  : 'Not provided',
                               isDark: isDark,
                             ),
                             if (job.slaDeadline != null) ...[
                               const SizedBox(height: 10),
                               _buildDetailRow(
                                 label: 'SLA Target Deadline',
-                                value: DateFormat('MMM d, hh:mm a').format(job.slaDeadline!),
+                                value: DateFormat('MMM d, hh:mm a')
+                                    .format(job.slaDeadline!),
                                 isDark: isDark,
                                 valueColor: AppColors.high,
                               ),
@@ -205,7 +242,8 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
                     // Description Card
                     Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -213,11 +251,14 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                           children: [
                             Row(
                               children: const [
-                                Icon(Icons.description_outlined, color: AppColors.primary, size: 18),
+                                Icon(Icons.description_outlined,
+                                    color: AppColors.primary, size: 18),
                                 SizedBox(width: 8),
                                 Text(
-                                  'Issue Description',
-                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                  'Description',
+                                  style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold),
                                 ),
                               ],
                             ),
@@ -229,7 +270,9 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                               style: TextStyle(
                                 fontSize: 14,
                                 height: 1.4,
-                                color: isDark ? AppColors.darkTextSecondary : const Color(0xFF334155),
+                                color: isDark
+                                    ? AppColors.darkTextSecondary
+                                    : const Color(0xFF334155),
                               ),
                             ),
                           ],
@@ -240,7 +283,8 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
                     // Status History Card
                     Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -248,23 +292,29 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                           children: [
                             Row(
                               children: const [
-                                Icon(Icons.history_outlined, color: AppColors.primary, size: 18),
+                                Icon(Icons.history_outlined,
+                                    color: AppColors.primary, size: 18),
                                 SizedBox(width: 8),
                                 Text(
                                   'Status History',
-                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold),
                                 ),
                               ],
                             ),
                             const Divider(height: 20),
                             if (job.statusHistories.isEmpty)
                               Padding(
-                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 8),
                                 child: Text(
                                   'Current status is ${job.status}. No previous transitions recorded.',
                                   style: TextStyle(
                                     fontSize: 13,
-                                    color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                    color: isDark
+                                        ? AppColors.darkTextMuted
+                                        : AppColors.lightTextMuted,
                                   ),
                                 ),
                               )
@@ -273,52 +323,88 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                                 shrinkWrap: true,
                                 physics: const NeverScrollableScrollPhysics(),
                                 itemCount: job.statusHistories.length,
-                                separatorBuilder: (_, __) => const Divider(height: 16),
+                                separatorBuilder: (_, __) =>
+                                    const Divider(height: 16),
                                 itemBuilder: (context, index) {
                                   final history = job.statusHistories[index];
                                   return Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Container(
                                         padding: const EdgeInsets.all(4),
                                         decoration: BoxDecoration(
-                                          color: AppColors.getStatusBgColor(history.newStatus),
+                                          color: AppColors.getStatusBgColor(
+                                              history.newStatus),
                                           shape: BoxShape.circle,
                                         ),
                                         child: Icon(
                                           Icons.circle,
                                           size: 8,
-                                          color: AppColors.getStatusColor(history.newStatus),
+                                          color: AppColors.getStatusColor(
+                                              history.newStatus),
                                         ),
                                       ),
                                       const SizedBox(width: 10),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              mainAxisAlignment:
+                                                  MainAxisAlignment
+                                                      .spaceBetween,
                                               children: [
                                                 Text(
                                                   '${history.previousStatus.isNotEmpty ? '${history.previousStatus} → ' : ''}${history.newStatus}',
-                                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                                  style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.bold,
+                                                      fontSize: 13),
                                                 ),
                                                 Text(
-                                                  DateFormat('MMM d, hh:mm a').format(history.timestamp),
+                                                  DateFormat('MMM d, hh:mm a')
+                                                      .format(
+                                                          history.timestamp),
                                                   style: TextStyle(
                                                     fontSize: 11,
-                                                    color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                                    color: isDark
+                                                        ? AppColors
+                                                            .darkTextMuted
+                                                        : AppColors
+                                                            .lightTextMuted,
                                                   ),
                                                 ),
                                               ],
                                             ),
+                                            if (history.changedByName
+                                                    ?.isNotEmpty ==
+                                                true) ...[
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                'Changed by ${history.changedByName}',
+                                                style: TextStyle(
+                                                  fontSize: 12,
+                                                  color: isDark
+                                                      ? AppColors
+                                                          .darkTextSecondary
+                                                      : AppColors
+                                                          .lightTextSecondary,
+                                                ),
+                                              ),
+                                            ],
                                             if (history.reason.isNotEmpty) ...[
                                               const SizedBox(height: 2),
                                               Text(
                                                 history.reason,
                                                 style: TextStyle(
                                                   fontSize: 12,
-                                                  color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                                                  color: isDark
+                                                      ? AppColors
+                                                          .darkTextSecondary
+                                                      : AppColors
+                                                          .lightTextSecondary,
                                                 ),
                                               ),
                                             ],
@@ -337,7 +423,8 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
 
                     // Field Notes Card
                     Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -348,18 +435,22 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                               children: [
                                 Row(
                                   children: const [
-                                    Icon(Icons.speaker_notes_outlined, color: AppColors.primary, size: 18),
+                                    Icon(Icons.speaker_notes_outlined,
+                                        color: AppColors.primary, size: 18),
                                     SizedBox(width: 8),
                                     Text(
                                       'Field Notes',
-                                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                      style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold),
                                     ),
                                   ],
                                 ),
                                 TextButton.icon(
                                   onPressed: _openAddNoteModal,
                                   icon: const Icon(Icons.add, size: 16),
-                                  label: const Text('Add Note', style: TextStyle(fontSize: 12)),
+                                  label: const Text('Add Note',
+                                      style: TextStyle(fontSize: 12)),
                                 ),
                               ],
                             ),
@@ -372,14 +463,16 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                     const SizedBox(height: 24),
                   ],
                 ),
-      bottomNavigationBar: job != null
+      bottomNavigationBar: job != null &&
+              (isCompleted || isInProgress || isScheduled)
           ? Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: isDark ? AppColors.darkCard : Colors.white,
                 border: Border(
                   top: BorderSide(
-                    color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
+                    color:
+                        isDark ? AppColors.darkBorder : AppColors.lightBorder,
                     width: 1,
                   ),
                 ),
@@ -399,20 +492,19 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                           onPressed: () {
                             Navigator.pushNamed(
                               context,
-                              AppRouter.jobExecution,
-                              arguments: job.id,
+                              AppRouter.jobExecutionPath(job.id),
                             );
                           },
                           icon: const Icon(Icons.visibility_outlined, size: 18),
-                          label: const Text('View Execution & Completion Evidence'),
+                          label: const Text(
+                              'View Execution & Completion Evidence'),
                         )
                       : isInProgress
                           ? ElevatedButton.icon(
                               onPressed: () {
                                 Navigator.pushNamed(
                                   context,
-                                  AppRouter.jobExecution,
-                                  arguments: job.id,
+                                  AppRouter.jobExecutionPath(job.id),
                                 );
                               },
                               icon: const Icon(Icons.play_arrow, size: 18),
@@ -426,15 +518,16 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                               ? ElevatedButton.icon(
                                   onPressed: () async {
                                     final nav = Navigator.of(context);
-                                    final success = await provider.startJob(job.id);
+                                    final success =
+                                        await provider.startJob(job.id);
                                     if (success && mounted) {
                                       nav.pushNamed(
-                                        AppRouter.jobExecution,
-                                        arguments: job.id,
+                                        AppRouter.jobExecutionPath(job.id),
                                       );
                                     }
                                   },
-                                  icon: const Icon(Icons.play_arrow_outlined, size: 18),
+                                  icon: const Icon(Icons.play_arrow_outlined,
+                                      size: 18),
                                   label: const Text('Start Job'),
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: AppColors.primary,
@@ -445,11 +538,11 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
                                   onPressed: () {
                                     Navigator.pushNamed(
                                       context,
-                                      AppRouter.jobExecution,
-                                      arguments: job.id,
+                                      AppRouter.jobExecutionPath(job.id),
                                     );
                                   },
-                                  icon: const Icon(Icons.arrow_forward, size: 18),
+                                  icon:
+                                      const Icon(Icons.arrow_forward, size: 18),
                                   label: const Text('Open Job Workspace'),
                                 ),
                 ),
@@ -472,7 +565,9 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
           label,
           style: TextStyle(
             fontSize: 13,
-            color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+            color: isDark
+                ? AppColors.darkTextSecondary
+                : AppColors.lightTextSecondary,
           ),
         ),
         Text(
@@ -480,7 +575,10 @@ class _JobDetailsScreenState extends State<JobDetailsScreen> {
           style: TextStyle(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: valueColor ?? (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary),
+            color: valueColor ??
+                (isDark
+                    ? AppColors.darkTextPrimary
+                    : AppColors.lightTextPrimary),
           ),
         ),
       ],

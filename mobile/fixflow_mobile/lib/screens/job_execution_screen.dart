@@ -1,5 +1,3 @@
-import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
@@ -24,8 +22,11 @@ class JobExecutionScreen extends StatefulWidget {
 
 class _JobExecutionScreenState extends State<JobExecutionScreen> {
   final GlobalKey<JobTimerState> _timerKey = GlobalKey<JobTimerState>();
+  final GlobalKey<PhotoUploadState> _photoUploadKey =
+      GlobalKey<PhotoUploadState>();
   final List<PhotoItem> _photos = [];
   bool _isCompletingJob = false;
+  int _elapsedSeconds = 0;
 
   @override
   void initState() {
@@ -39,47 +40,77 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
     AddNoteModal.show(
       context,
       onSave: (text) async {
-        final success = await context.read<WorkOrderProvider>().addNote(widget.workOrderId, text);
+        final success = await context
+            .read<WorkOrderProvider>()
+            .addNote(widget.workOrderId, text);
         return success;
       },
     );
   }
 
-  Future<void> _handleCompleteJob() async {
-    final timerState = _timerKey.currentState;
-    timerState?.pauseTimer();
-
-    Navigator.pushNamed(
-      context,
-      AppRouter.jobSignature,
-      arguments: {
-        'workOrderId': widget.workOrderId,
-        'elapsedSeconds': timerState?.elapsedSeconds ?? 0,
-        'photoCount': _photos.where((p) => p.isUploaded).length,
-        'noteCount': context.read<WorkOrderProvider>().currentJob?.notes.length ?? 0,
-        'uploadedFileKey': _photos.isEmpty ? null : _photos.firstWhere((p) => p.fileKey != null, orElse: () => PhotoItem(id: '', name: '', bytes: Uint8List(0))).fileKey,
-      },
-    );
+  String _formatElapsedTime(int totalSeconds) {
+    final hours = totalSeconds ~/ 3600;
+    final minutes = (totalSeconds % 3600) ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
   }
 
-  Future<void> _handleUploadPhoto(PhotoItem item) async {
-    final fileKey = await context.read<WorkOrderProvider>().uploadEvidencePhoto(
-      widget.workOrderId,
-      item.bytes,
-      item.name,
+  Future<void> _handleCompleteJob() async {
+    if (_isCompletingJob) return;
+
+    final timerState = _timerKey.currentState;
+    final uploadedPhotos = _photos
+        .where((photo) => photo.isUploaded && photo.fileKey != null)
+        .toList();
+    final uploadedPhoto = uploadedPhotos.isEmpty ? null : uploadedPhotos.first;
+    final currentJob = context.read<WorkOrderProvider>().currentJob;
+
+    setState(() {
+      _isCompletingJob = true;
+    });
+    timerState?.pauseTimer();
+
+    await Navigator.of(context).pushNamed(
+      AppRouter.jobSignaturePath(widget.workOrderId),
+      arguments: {
+        'elapsedSeconds': timerState?.elapsedSeconds ?? _elapsedSeconds,
+        'photoCount': uploadedPhotos.length,
+        'noteCount': currentJob?.id == widget.workOrderId
+            ? currentJob?.notes.length ?? 0
+            : 0,
+        'uploadedFileKey': uploadedPhoto?.fileKey,
+        'uploadedPhotoName': uploadedPhoto?.name,
+      },
     );
-    if (fileKey != null) {
+
+    if (mounted) {
+      setState(() {
+        _isCompletingJob = false;
+      });
+    }
+  }
+
+  Future<String?> _handleUploadPhoto(PhotoItem item) async {
+    final fileKey = await context.read<WorkOrderProvider>().uploadEvidencePhoto(
+          widget.workOrderId,
+          item.bytes,
+          item.name,
+        );
+    if (fileKey != null && mounted) {
       setState(() {
         item.fileKey = fileKey;
         item.isUploaded = true;
       });
     }
+    return fileKey;
   }
 
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<WorkOrderProvider>();
-    final job = provider.currentJob;
+    final job = provider.currentJob?.id == widget.workOrderId
+        ? provider.currentJob
+        : null;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
@@ -103,6 +134,29 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
           ],
         ),
         actions: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.darkCard : AppColors.primaryAccent,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.timer_outlined, size: 16),
+                  const SizedBox(width: 4),
+                  Text(
+                    _formatElapsedTime(_elapsedSeconds),
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.refresh),
             tooltip: 'Refresh',
@@ -119,7 +173,8 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                   children: [
                     // Job Summary Card
                     Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                       child: Padding(
                         padding: const EdgeInsets.all(14),
                         child: Column(
@@ -138,20 +193,28 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                               style: TextStyle(
                                 fontSize: 16,
                                 fontWeight: FontWeight.bold,
-                                color: isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary,
+                                color: isDark
+                                    ? AppColors.darkTextPrimary
+                                    : AppColors.lightTextPrimary,
                               ),
                             ),
                             const SizedBox(height: 6),
                             Row(
                               children: [
-                                Icon(Icons.location_on_outlined, size: 14, color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted),
+                                Icon(Icons.location_on_outlined,
+                                    size: 14,
+                                    color: isDark
+                                        ? AppColors.darkTextMuted
+                                        : AppColors.lightTextMuted),
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
                                     job.formattedLocation,
                                     style: TextStyle(
                                       fontSize: 13,
-                                      color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                                      color: isDark
+                                          ? AppColors.darkTextSecondary
+                                          : AppColors.lightTextSecondary,
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
@@ -162,13 +225,21 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                               const SizedBox(height: 6),
                               Row(
                                 children: [
-                                  Icon(Icons.access_time_outlined, size: 14, color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted),
+                                  Icon(Icons.access_time_outlined,
+                                      size: 14,
+                                      color: isDark
+                                          ? AppColors.darkTextMuted
+                                          : AppColors.lightTextMuted),
                                   const SizedBox(width: 4),
                                   Text(
-                                    '${DateFormat('hh:mm a').format(job.scheduledStartTime!)} - ${job.scheduledEndTime != null ? DateFormat('hh:mm a').format(job.scheduledEndTime!) : '--:--'}',
+                                    job.scheduledEndTime == null
+                                        ? 'Starts ${DateFormat('hh:mm a').format(job.scheduledStartTime!)}'
+                                        : '${DateFormat('hh:mm a').format(job.scheduledStartTime!)} - ${DateFormat('hh:mm a').format(job.scheduledEndTime!)}',
                                     style: TextStyle(
                                       fontSize: 13,
-                                      color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
+                                      color: isDark
+                                          ? AppColors.darkTextSecondary
+                                          : AppColors.lightTextSecondary,
                                     ),
                                   ),
                                 ],
@@ -180,16 +251,23 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                     ),
                     const SizedBox(height: 14),
 
-                    // Job Timer Widget
                     JobTimer(
                       key: _timerKey,
-                      initialElapsedSeconds: 0,
+                      initialElapsedSeconds: _elapsedSeconds,
+                      onTick: (seconds) {
+                        if (mounted) {
+                          setState(() {
+                            _elapsedSeconds = seconds;
+                          });
+                        }
+                      },
                     ),
                     const SizedBox(height: 14),
 
                     // Field Work Notes Card
                     Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
@@ -200,18 +278,22 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                               children: [
                                 Row(
                                   children: const [
-                                    Icon(Icons.speaker_notes_outlined, color: AppColors.primary, size: 18),
+                                    Icon(Icons.speaker_notes_outlined,
+                                        color: AppColors.primary, size: 18),
                                     SizedBox(width: 8),
                                     Text(
                                       'Field Work Notes',
-                                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                                      style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold),
                                     ),
                                   ],
                                 ),
                                 TextButton.icon(
                                   onPressed: _openAddNoteModal,
                                   icon: const Icon(Icons.add, size: 16),
-                                  label: const Text('Add Note', style: TextStyle(fontSize: 12)),
+                                  label: const Text('Add Note',
+                                      style: TextStyle(fontSize: 12)),
                                 ),
                               ],
                             ),
@@ -225,19 +307,35 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
 
                     // Completion Evidence: Photos
                     Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
                       child: Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
-                              children: const [
-                                Icon(Icons.photo_camera_outlined, color: AppColors.primary, size: 18),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Completion Evidence',
-                                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Row(
+                                  children: [
+                                    Icon(Icons.photo_camera_outlined,
+                                        color: AppColors.primary, size: 18),
+                                    SizedBox(width: 8),
+                                    Text(
+                                      'Completion Evidence',
+                                      style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ],
+                                ),
+                                TextButton.icon(
+                                  onPressed: () => _photoUploadKey.currentState
+                                      ?.showImageSourceDialog(),
+                                  icon: const Icon(Icons.add_a_photo_outlined,
+                                      size: 16),
+                                  label: const Text('Add Photo'),
                                 ),
                               ],
                             ),
@@ -246,11 +344,14 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                               'Take "after" photos showing completed repair.',
                               style: TextStyle(
                                 fontSize: 12,
-                                color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                color: isDark
+                                    ? AppColors.darkTextMuted
+                                    : AppColors.lightTextMuted,
                               ),
                             ),
                             const Divider(height: 18),
                             PhotoUpload(
+                              key: _photoUploadKey,
                               photos: _photos,
                               onAddPhoto: (item) {
                                 setState(() {
@@ -262,10 +363,7 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                                   _photos.removeWhere((p) => p.id == id);
                                 });
                               },
-                              onUploadPhoto: (item) async {
-                                await _handleUploadPhoto(item);
-                                return item.fileKey;
-                              },
+                              onUploadPhoto: _handleUploadPhoto,
                             ),
                           ],
                         ),
@@ -278,22 +376,29 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                       SizedBox(
                         height: 52,
                         child: ElevatedButton.icon(
-                          onPressed: _isCompletingJob ? null : _handleCompleteJob,
+                          onPressed:
+                              _isCompletingJob ? null : _handleCompleteJob,
                           icon: _isCompletingJob
                               ? const SizedBox(
                                   width: 18,
                                   height: 18,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  child: CircularProgressIndicator(
+                                      color: Colors.white, strokeWidth: 2),
                                 )
-                              : const Icon(Icons.check_circle_outline, size: 22),
+                              : const Icon(Icons.check_circle_outline,
+                                  size: 22),
                           label: Text(
-                            _isCompletingJob ? 'Navigating...' : 'Complete Job & Capture Signature',
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            _isCompletingJob
+                                ? 'Navigating...'
+                                : 'Complete Job & Capture Signature',
+                            style: const TextStyle(
+                                fontSize: 15, fontWeight: FontWeight.bold),
                           ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.completed,
                             foregroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(10)),
                           ),
                         ),
                       )
@@ -304,12 +409,14 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                         decoration: BoxDecoration(
                           color: AppColors.completedBg,
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: AppColors.completed.withOpacity(0.3)),
+                          border: Border.all(
+                              color: AppColors.completed.withOpacity(0.3)),
                         ),
                         child: const Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.check_circle, color: AppColors.completed, size: 24),
+                            Icon(Icons.check_circle,
+                                color: AppColors.completed, size: 24),
                             SizedBox(width: 10),
                             Text(
                               'Job Completed Successfully',

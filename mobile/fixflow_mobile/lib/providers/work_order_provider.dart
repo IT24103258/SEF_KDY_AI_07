@@ -54,31 +54,37 @@ class WorkOrderProvider with ChangeNotifier {
     notifyListeners();
 
     try {
-      final date = filterDate ?? _selectedDate;
-      _scheduleJobs = await _service.getTechnicianSchedule(filterDate: date);
-      // Sort chronologically by scheduled start time
+      _scheduleJobs =
+          await _service.getTechnicianSchedule(filterDate: filterDate);
       _scheduleJobs.sort((a, b) {
         if (a.scheduledStartTime == null) return 1;
         if (b.scheduledStartTime == null) return -1;
         return a.scheduledStartTime!.compareTo(b.scheduledStartTime!);
       });
     } catch (e) {
-      _error = e.toString().replaceAll('Exception: ', '').replaceAll('AppException: ', '');
+      _error = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('AppException: ', '');
     }
 
     _isLoading = false;
     notifyListeners();
   }
 
-  Future<void> fetchAllJobs({String? status, String? search, String? priority}) async {
+  Future<void> fetchAllJobs(
+      {String? status, String? search, String? priority}) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
 
     try {
-      final effectiveStatus = status ?? (_selectedStatusFilter.isNotEmpty ? _selectedStatusFilter : null);
-      final effectiveSearch = search ?? (_searchQuery.isNotEmpty ? _searchQuery : null);
-      final effectivePriority = priority ?? (_selectedPriorityFilter.isNotEmpty ? _selectedPriorityFilter : null);
+      final effectiveStatus = status ??
+          (_selectedStatusFilter.isNotEmpty ? _selectedStatusFilter : null);
+      final effectiveSearch =
+          search ?? (_searchQuery.isNotEmpty ? _searchQuery : null);
+      final effectivePriority = priority ??
+          (_selectedPriorityFilter.isNotEmpty ? _selectedPriorityFilter : null);
 
       _allJobs = await _service.getAllJobs(
         status: effectiveStatus,
@@ -86,7 +92,10 @@ class WorkOrderProvider with ChangeNotifier {
         priority: effectivePriority,
       );
     } catch (e) {
-      _error = e.toString().replaceAll('Exception: ', '').replaceAll('AppException: ', '');
+      _error = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('AppException: ', '');
     }
 
     _isLoading = false;
@@ -101,7 +110,10 @@ class WorkOrderProvider with ChangeNotifier {
     try {
       _currentJob = await _service.getWorkOrderById(id);
     } catch (e) {
-      _error = e.toString().replaceAll('Exception: ', '').replaceAll('AppException: ', '');
+      _error = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('AppException: ', '');
     }
 
     _isLoading = false;
@@ -127,7 +139,10 @@ class WorkOrderProvider with ChangeNotifier {
         return true;
       }
     } catch (e) {
-      _error = e.toString().replaceAll('Exception: ', '').replaceAll('AppException: ', '');
+      _error = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('AppException: ', '');
     }
 
     _isLoading = false;
@@ -144,7 +159,9 @@ class WorkOrderProvider with ChangeNotifier {
       final updated = await _service.updateStatus(
         id,
         'Paused',
-        reason: reason.isNotEmpty ? reason : 'Job temporarily paused by technician.',
+        reason: reason.isNotEmpty
+            ? reason
+            : 'Job temporarily paused by technician.',
       );
       if (updated != null) {
         _currentJob = updated;
@@ -154,7 +171,10 @@ class WorkOrderProvider with ChangeNotifier {
         return true;
       }
     } catch (e) {
-      _error = e.toString().replaceAll('Exception: ', '').replaceAll('AppException: ', '');
+      _error = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('AppException: ', '');
     }
 
     _isLoading = false;
@@ -191,7 +211,10 @@ class WorkOrderProvider with ChangeNotifier {
         return true;
       }
     } catch (e) {
-      _error = e.toString().replaceAll('Exception: ', '').replaceAll('AppException: ', '');
+      _error = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('AppException: ', '');
     }
 
     _isLoading = false;
@@ -207,13 +230,17 @@ class WorkOrderProvider with ChangeNotifier {
         return true;
       }
     } catch (e) {
-      _error = e.toString().replaceAll('Exception: ', '').replaceAll('AppException: ', '');
+      _error = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('AppException: ', '');
       notifyListeners();
     }
     return false;
   }
 
-  Future<String?> uploadEvidencePhoto(String id, List<int> bytes, String filename) async {
+  Future<String?> uploadEvidencePhoto(
+      String id, List<int> bytes, String filename) async {
     try {
       final fileKey = await _service.uploadPhoto(id, bytes, filename);
       if (fileKey != null) {
@@ -221,7 +248,10 @@ class WorkOrderProvider with ChangeNotifier {
         return fileKey;
       }
     } catch (e) {
-      _error = e.toString().replaceAll('Exception: ', '').replaceAll('AppException: ', '');
+      _error = e
+          .toString()
+          .replaceAll('Exception: ', '')
+          .replaceAll('AppException: ', '');
       notifyListeners();
     }
     return null;

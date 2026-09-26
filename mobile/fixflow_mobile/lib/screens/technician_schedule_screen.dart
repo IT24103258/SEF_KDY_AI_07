@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import '../core/routes/app_router.dart';
-import '../core/theme/app_colors.dart';
 import '../models/work_order_model.dart';
 import '../providers/work_order_provider.dart';
 import '../widgets/app_top_bar.dart';
@@ -14,34 +12,29 @@ class TechnicianScheduleScreen extends StatefulWidget {
   const TechnicianScheduleScreen({super.key});
 
   @override
-  State<TechnicianScheduleScreen> createState() => _TechnicianScheduleScreenState();
+  State<TechnicianScheduleScreen> createState() =>
+      _TechnicianScheduleScreenState();
 }
 
 class _TechnicianScheduleScreenState extends State<TechnicianScheduleScreen> {
-  DateTime _selectedDate = DateTime.now();
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<WorkOrderProvider>().fetchSchedule(filterDate: _selectedDate);
+      context.read<WorkOrderProvider>().fetchSchedule();
     });
   }
 
-  void _onSelectDate(DateTime date) {
-    setState(() {
-      _selectedDate = date;
-    });
-    context.read<WorkOrderProvider>().setSelectedDate(date);
-  }
-
-  Map<DateTime, List<WorkOrderModel>> _groupJobsByDate(List<WorkOrderModel> jobs) {
+  Map<DateTime, List<WorkOrderModel>> _groupJobsByDate(
+      List<WorkOrderModel> jobs) {
     final Map<DateTime, List<WorkOrderModel>> grouped = {};
 
-    for (final job in jobs) {
-      final date = job.scheduledStartTime != null
-          ? DateTime(job.scheduledStartTime!.year, job.scheduledStartTime!.month, job.scheduledStartTime!.day)
-          : DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+    for (final job in jobs.where((job) => job.scheduledStartTime != null)) {
+      final date = DateTime(
+        job.scheduledStartTime!.year,
+        job.scheduledStartTime!.month,
+        job.scheduledStartTime!.day,
+      );
 
       if (!grouped.containsKey(date)) {
         grouped[date] = [];
@@ -64,79 +57,23 @@ class _TechnicianScheduleScreenState extends State<TechnicianScheduleScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<WorkOrderProvider>();
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final groupedJobs = _groupJobsByDate(provider.scheduleJobs);
-    final sortedDates = groupedJobs.keys.toList()..sort((a, b) => a.compareTo(b));
+    final sortedDates = groupedJobs.keys.toList()
+      ..sort((a, b) => a.compareTo(b));
+    final unscheduledJobs = provider.scheduleJobs
+        .where((job) => job.scheduledStartTime == null)
+        .toList();
 
     return Scaffold(
       appBar: AppTopBar(
         title: 'My Schedule',
-        onRefresh: () => provider.fetchSchedule(filterDate: _selectedDate),
+        onRefresh: provider.fetchSchedule,
       ),
       body: RefreshIndicator(
-        onRefresh: () => provider.fetchSchedule(filterDate: _selectedDate),
+        onRefresh: provider.fetchSchedule,
         child: Column(
           children: [
-            // Horizontal Day Selector Bar
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-              decoration: BoxDecoration(
-                color: isDark ? AppColors.darkCard : Colors.white,
-                border: Border(
-                  bottom: BorderSide(
-                    color: isDark ? AppColors.darkBorder : AppColors.lightBorder,
-                    width: 1,
-                  ),
-                ),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: List.generate(7, (index) {
-                  final date = DateTime.now().add(Duration(days: index - 2));
-                  final isSelected = date.day == _selectedDate.day &&
-                      date.month == _selectedDate.month &&
-                      date.year == _selectedDate.year;
-
-                  return GestureDetector(
-                    onTap: () => _onSelectDate(date),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                      decoration: BoxDecoration(
-                        color: isSelected ? AppColors.primary : Colors.transparent,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Column(
-                        children: [
-                          Text(
-                            DateFormat('E').format(date).toUpperCase(),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: isSelected
-                                  ? Colors.white
-                                  : (isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted),
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            DateFormat('d').format(date),
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: isSelected
-                                  ? Colors.white
-                                  : (isDark ? AppColors.darkTextPrimary : AppColors.lightTextPrimary),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }),
-              ),
-            ),
-
             // Job List or States
             Expanded(
               child: provider.isLoading && provider.scheduleJobs.isEmpty
@@ -147,54 +84,75 @@ class _TechnicianScheduleScreenState extends State<TechnicianScheduleScreen> {
                           title: 'Unable to Load Schedule',
                           message: provider.error!,
                           retryButtonText: 'Retry Schedule',
-                          onRetry: () => provider.fetchSchedule(filterDate: _selectedDate),
+                          onRetry: provider.fetchSchedule,
                         )
                       : provider.scheduleJobs.isEmpty
                           ? EmptyState(
                               icon: Icons.event_available_outlined,
                               title: 'No jobs scheduled',
-                              message: 'You have no maintenance jobs scheduled for ${DateFormat('EEEE, MMM d').format(_selectedDate)}.',
+                              message:
+                                  'Your upcoming assigned maintenance jobs will appear here.',
                               retryButtonText: 'Refresh Schedule',
-                              onRetry: () => provider.fetchSchedule(filterDate: _selectedDate),
+                              onRetry: provider.fetchSchedule,
                             )
                           : ListView.builder(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              itemCount: sortedDates.length,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
+                              itemCount: sortedDates.length +
+                                  (unscheduledJobs.isEmpty ? 0 : 1),
                               itemBuilder: (context, dateIndex) {
-                                final date = sortedDates[dateIndex];
-                                final dateJobs = groupedJobs[date] ?? [];
+                                final isUnscheduledSection =
+                                    dateIndex == sortedDates.length;
+                                final dateJobs = isUnscheduledSection
+                                    ? unscheduledJobs
+                                    : groupedJobs[sortedDates[dateIndex]] ?? [];
 
                                 return Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    DateSectionHeader(
-                                      date: date,
-                                      count: dateJobs.length,
-                                    ),
+                                    if (isUnscheduledSection)
+                                      const Padding(
+                                        padding:
+                                            EdgeInsets.fromLTRB(4, 16, 4, 10),
+                                        child: Text(
+                                          'UNSCHEDULED',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.8,
+                                          ),
+                                        ),
+                                      )
+                                    else
+                                      DateSectionHeader(
+                                        date: sortedDates[dateIndex],
+                                        count: dateJobs.length,
+                                      ),
                                     ...dateJobs.map((job) {
                                       return JobCard(
                                         job: job,
                                         onDetails: () {
                                           Navigator.pushNamed(
                                             context,
-                                            AppRouter.jobDetails,
-                                            arguments: job.id,
+                                            AppRouter.jobDetailsPath(job.id),
                                           );
                                         },
                                         onStart: () async {
-                                          if (job.status.toLowerCase() == 'inprogress') {
+                                          if (job.status.toLowerCase() ==
+                                              'inprogress') {
                                             Navigator.pushNamed(
                                               context,
-                                              AppRouter.jobExecution,
-                                              arguments: job.id,
+                                              AppRouter.jobExecutionPath(
+                                                  job.id),
                                             );
                                           } else {
-                                            final success = await provider.startJob(job.id);
+                                            final success =
+                                                await provider.startJob(job.id);
                                             if (success && context.mounted) {
                                               Navigator.pushNamed(
                                                 context,
-                                                AppRouter.jobExecution,
-                                                arguments: job.id,
+                                                AppRouter.jobExecutionPath(
+                                                    job.id),
                                               );
                                             }
                                           }

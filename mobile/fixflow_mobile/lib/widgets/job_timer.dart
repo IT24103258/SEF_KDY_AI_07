@@ -23,6 +23,7 @@ class JobTimerState extends State<JobTimer> {
   DateTime? _lastStartTime;
   Duration _accumulatedTime = Duration.zero;
   bool _isRunning = false;
+  bool _isStopped = true;
 
   int get elapsedSeconds {
     if (_isRunning && _lastStartTime != null) {
@@ -33,44 +34,47 @@ class JobTimerState extends State<JobTimer> {
   }
 
   bool get isRunning => _isRunning;
-  bool get isPaused => !_isRunning && _accumulatedTime.inSeconds > 0;
+  bool get isPaused =>
+      !_isRunning && !_isStopped && _accumulatedTime.inSeconds > 0;
+  bool get isStopped => !_isRunning && _isStopped;
 
   @override
   void initState() {
     super.initState();
     _accumulatedTime = Duration(seconds: widget.initialElapsedSeconds);
-    // Auto-start on mount if desired
-    startTimer();
   }
 
   @override
   void dispose() {
     _periodicTimer?.cancel();
-    _periodicTimer = null;
     super.dispose();
   }
 
   void startTimer() {
     if (_isRunning) return;
+
     setState(() {
       _isRunning = true;
+      _isStopped = false;
       _lastStartTime = DateTime.now();
     });
 
     _periodicTimer?.cancel();
     _periodicTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
-      if (mounted) {
-        setState(() {});
-        widget.onTick?.call(elapsedSeconds);
-      }
+      if (!mounted) return;
+      setState(() {});
+      widget.onTick?.call(elapsedSeconds);
     });
 
     widget.onStateChanged?.call();
   }
 
-  void pauseTimer() {
-    if (!_isRunning) return;
-    if (_lastStartTime != null) {
+  void pauseTimer() => _endActiveSession(stopped: false);
+
+  void stopTimer() => _endActiveSession(stopped: true);
+
+  void _endActiveSession({required bool stopped}) {
+    if (_isRunning && _lastStartTime != null) {
       _accumulatedTime += DateTime.now().difference(_lastStartTime!);
     }
 
@@ -79,24 +83,11 @@ class JobTimerState extends State<JobTimer> {
 
     setState(() {
       _isRunning = false;
+      _isStopped = stopped;
       _lastStartTime = null;
     });
 
     widget.onTick?.call(elapsedSeconds);
-    widget.onStateChanged?.call();
-  }
-
-  void resetTimer() {
-    _periodicTimer?.cancel();
-    _periodicTimer = null;
-
-    setState(() {
-      _isRunning = false;
-      _lastStartTime = null;
-      _accumulatedTime = Duration.zero;
-    });
-
-    widget.onTick?.call(0);
     widget.onStateChanged?.call();
   }
 
@@ -111,6 +102,11 @@ class JobTimerState extends State<JobTimer> {
   Widget build(BuildContext context) {
     final currentSeconds = elapsedSeconds;
     final formattedTime = formatTime(currentSeconds);
+    final primaryActionLabel = _isRunning
+        ? 'Pause'
+        : currentSeconds == 0
+            ? 'Start'
+            : 'Resume';
 
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
@@ -134,7 +130,11 @@ class JobTimerState extends State<JobTimer> {
                 width: 8,
                 height: 8,
                 decoration: BoxDecoration(
-                  color: _isRunning ? Colors.greenAccent : (isPaused ? Colors.amberAccent : Colors.white70),
+                  color: _isRunning
+                      ? Colors.greenAccent
+                      : isPaused
+                          ? Colors.amberAccent
+                          : Colors.white70,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -169,37 +169,30 @@ class JobTimerState extends State<JobTimer> {
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              if (_isRunning)
-                ElevatedButton.icon(
-                  onPressed: pauseTimer,
-                  icon: const Icon(Icons.pause, size: 18),
-                  label: const Text('Pause'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.amber.shade700,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  ),
-                )
-              else
-                ElevatedButton.icon(
-                  onPressed: startTimer,
-                  icon: const Icon(Icons.play_arrow, size: 18),
-                  label: Text(isPaused ? 'Resume' : 'Start'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.green.shade600,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                  ),
+              ElevatedButton.icon(
+                onPressed: _isRunning ? pauseTimer : startTimer,
+                icon:
+                    Icon(_isRunning ? Icons.pause : Icons.play_arrow, size: 18),
+                label: Text(primaryActionLabel),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _isRunning
+                      ? Colors.amber.shade700
+                      : Colors.green.shade600,
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
                 ),
+              ),
               const SizedBox(width: 12),
               OutlinedButton.icon(
-                onPressed: (currentSeconds > 0) ? resetTimer : null,
-                icon: const Icon(Icons.refresh, size: 18),
-                label: const Text('Reset'),
+                onPressed: _isStopped ? null : stopTimer,
+                icon: const Icon(Icons.stop_outlined, size: 18),
+                label: const Text('Stop'),
                 style: OutlinedButton.styleFrom(
                   foregroundColor: Colors.white,
                   side: const BorderSide(color: Colors.white70),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                 ),
               ),
             ],
