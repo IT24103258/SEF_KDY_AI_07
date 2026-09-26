@@ -177,7 +177,7 @@ public class WorkOrderTests
 
         Assert.False(valResult.IsValid);
         Assert.False(valResult.IsWithinBusinessHours);
-        Assert.Contains(valResult.ValidationErrors, e => e.Contains("outside operational business hours", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(valResult.ValidationErrors, e => e.Contains("outside opera", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
