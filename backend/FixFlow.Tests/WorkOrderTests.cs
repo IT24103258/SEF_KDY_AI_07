@@ -57,23 +57,34 @@ public class WorkOrderTests
             RequestNumber = "REQ-2026-0001",
             Title = "Ceiling Light Short Circuit",
             Description = "Bathroom light sparked and tripped breaker.",
-            Status = RequestStatus.Pending,
+            Status = RequestStatus.Matched,
             LocationId = loc.Id,
-            RequesterId = requester.Id
+            RequesterId = requester.Id,
+            CreatedAt = DateTime.UtcNow
         };
         await context.MaintenanceRequests.AddAsync(request);
 
-        // Seed SLAs across standard levels to prevent SLA evaluation missing configurations
+        // Seed SLA configurations with generous resolution times to account for non-business day test runs
         var slas = new List<SLAConfiguration>
         {
-            new SLAConfiguration { PriorityLevel = "High", ResponseTimeHours = 2, ResolutionTimeHours = 24 },
-            new SLAConfiguration { PriorityLevel = "Medium", ResponseTimeHours = 4, ResolutionTimeHours = 48 },
-            new SLAConfiguration { PriorityLevel = "Low", ResponseTimeHours = 8, ResolutionTimeHours = 72 }
+            new SLAConfiguration { PriorityLevel = "High", ResponseTimeHours = 24, ResolutionTimeHours = 120 },
+            new SLAConfiguration { PriorityLevel = "Medium", ResponseTimeHours = 48, ResolutionTimeHours = 120 },
+            new SLAConfiguration { PriorityLevel = "Low", ResponseTimeHours = 72, ResolutionTimeHours = 120 }
         };
         await context.SLAConfigurations.AddRangeAsync(slas);
 
         await context.SaveChangesAsync();
         return (context, tech, request, manager, requester);
+    }
+
+    private DateTime GetNextWeekday()
+    {
+        var targetDate = DateTime.UtcNow.Date.AddDays(1);
+        while (targetDate.DayOfWeek == DayOfWeek.Saturday || targetDate.DayOfWeek == DayOfWeek.Sunday)
+        {
+            targetDate = targetDate.AddDays(1);
+        }
+        return targetDate;
     }
 
     [Fact]
@@ -87,13 +98,12 @@ public class WorkOrderTests
 
         var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
 
-        // Dynamically compute the next weekday at 10:00 AM to guarantee valid business hours
-        var targetDate = DateTime.UtcNow.Date.AddDays(1);
-        while (targetDate.DayOfWeek == DayOfWeek.Saturday || targetDate.DayOfWeek == DayOfWeek.Sunday)
-        {
-            targetDate = targetDate.AddDays(1);
-        }
-        var validBusinessSlot = targetDate.AddHours(10); // 10:00 AM weekday
+        // Guarantee a slot on a weekday at 10:00 AM within business hours
+        var validBusinessSlot = GetNextWeekday().AddHours(10);
+
+        // Align Request CreatedAt to avoid SLA expiration during weekend gaps
+        request.CreatedAt = validBusinessSlot.AddHours(-2);
+        await ctx.SaveChangesAsync();
 
         var reqDto = new ScheduleRequestDto
         {
@@ -126,7 +136,8 @@ public class WorkOrderTests
 
         var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
 
-        var today = DateTime.UtcNow.Date.AddDays(1);
+        var targetDate = GetNextWeekday();
+
         var existingBooking = new WorkOrder
         {
             WorkOrderNumber = "WO-TEST-001",
@@ -134,18 +145,17 @@ public class WorkOrderTests
             RequestId = request.Id,
             TechnicianId = tech.Id,
             Status = WorkOrderStatus.Scheduled,
-            ScheduledStartTime = today.AddHours(9),
-            ScheduledEndTime = today.AddHours(11),
+            ScheduledStartTime = targetDate.AddHours(9),
+            ScheduledEndTime = targetDate.AddHours(11),
             EstimatedDurationMinutes = 120
         };
         await ctx.Set<WorkOrder>().AddAsync(existingBooking);
         await ctx.SaveChangesAsync();
 
-        // Overlapping proposed slot: 10:00 - 12:00
         var valResult = await schedService.ValidateScheduleAsync(
             tech.Id,
-            today.AddHours(10),
-            today.AddHours(12),
+            targetDate.AddHours(10),
+            targetDate.AddHours(12),
             120,
             "High");
 
@@ -166,12 +176,11 @@ public class WorkOrderTests
 
         var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
 
-        // Night time slot: 22:00 - 23:30
-        var today = DateTime.UtcNow.Date.AddDays(1);
+        var targetDate = GetNextWeekday();
         var valResult = await schedService.ValidateScheduleAsync(
             tech.Id,
-            today.AddHours(22),
-            today.AddHours(23).AddMinutes(30),
+            targetDate.AddHours(22),
+            targetDate.AddHours(23).AddMinutes(30),
             90,
             "Medium");
 
@@ -194,11 +203,12 @@ public class WorkOrderTests
 
         var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
 
-        var today = DateTime.UtcNow.Date.AddDays(1);
+        var targetDate = GetNextWeekday();
+
         var valResult = await schedService.ValidateScheduleAsync(
             tech.Id,
-            today.AddHours(10),
-            today.AddHours(12),
+            targetDate.AddHours(10),
+            targetDate.AddHours(12),
             120,
             "Medium");
 
@@ -228,7 +238,6 @@ public class WorkOrderTests
         await ctx.Set<WorkOrder>().AddAsync(draftWo);
         await ctx.SaveChangesAsync();
 
-        // Attempting to jump directly from Draft to Completed should throw InvalidOperationException
         var updateDto = new WorkOrderStatusUpdateDto { Status = "Completed" };
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -246,7 +255,8 @@ public class WorkOrderTests
         var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
         var woService = new WorkOrderService(ctx, schedService, mockAudit.Object, mockNotify.Object);
 
-        var today = DateTime.UtcNow.Date.AddDays(1);
+        var targetDate = GetNextWeekday();
+
         var pendingWo = new WorkOrder
         {
             WorkOrderNumber = "WO-PENDING-001",
@@ -254,8 +264,8 @@ public class WorkOrderTests
             RequestId = request.Id,
             TechnicianId = tech.Id,
             Status = WorkOrderStatus.PendingManagerApproval,
-            ScheduledStartTime = today.AddHours(14),
-            ScheduledEndTime = today.AddHours(16),
+            ScheduledStartTime = targetDate.AddHours(14),
+            ScheduledEndTime = targetDate.AddHours(16),
             EstimatedDurationMinutes = 120
         };
         await ctx.Set<WorkOrder>().AddAsync(pendingWo);
@@ -274,7 +284,6 @@ public class WorkOrderTests
         Assert.NotNull(approvedDto.ApprovedAt);
         Assert.Equal("Schedule approved for afternoon slot.", approvedDto.ApprovalComments);
 
-        // Verify notification sent to technician
         mockNotify.Verify(n => n.SendNotificationAsync(tech.UserId, It.IsAny<string>(), It.IsAny<string>(), "Info"), Times.Once);
     }
 
