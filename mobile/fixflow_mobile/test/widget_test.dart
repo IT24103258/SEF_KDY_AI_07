@@ -148,27 +148,37 @@ void main() {
       await tester.pumpWidget(buildTestable());
       await tester.pump();
 
-      // Tap Submit without filling anything in
-      await tester.tap(find.text('Submit Request'));
+      final submitButton = find.text('Submit Request');
+
+      await tester.ensureVisible(submitButton);
+      await tester.tap(submitButton);
       await tester.pump();
 
       expect(find.text('Title is required.'), findsOneWidget);
       expect(find.text('Description is required.'), findsOneWidget);
     });
-
     testWidgets('shows short-description validation error',
         (tester) async {
       await tester.pumpWidget(buildTestable());
       await tester.pump();
 
       await tester.enterText(
-          find.widgetWithText(TextFormField, 'Title *'), 'Leaking tap');
+        find.widgetWithText(TextFormField, 'Title *'),
+        'Leaking tap',
+      );
+
       await tester.enterText(
-          find.widgetWithText(TextFormField, 'Description *'), 'Short');
-      await tester.tap(find.text('Submit Request'));
+        find.widgetWithText(TextFormField, 'Description *'),
+        'Short',
+      );
+
+      final submitButton = find.text('Submit Request');
+
+      await tester.ensureVisible(submitButton);
+      await tester.tap(submitButton);
       await tester.pump();
 
       expect(find.text('At least 20 characters required.'), findsOneWidget);
     });
   });
-}
+}
