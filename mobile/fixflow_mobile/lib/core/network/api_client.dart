@@ -37,6 +37,32 @@ class ApiClient {
     return _handleResponse(response);
   }
 
+  Future<Map<String, dynamic>> put(String endpoint, Map<String, dynamic> body) async {
+    final token = await _storage.getToken();
+    final response = await _client.put(
+      Uri.parse('${ApiConstants.baseUrl}$endpoint'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode(body),
+    );
+    return _handleResponse(response);
+  }
+
+  
+  Future<Map<String, dynamic>> delete(String endpoint) async {
+    final token = await _storage.getToken();
+    final response = await _client.delete(
+      Uri.parse('${ApiConstants.baseUrl}$endpoint'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+    );
+    return _handleResponse(response);
+  }
+
   Map<String, dynamic> _handleResponse(http.Response response) {
     final data = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode >= 200 && response.statusCode < 300) {
