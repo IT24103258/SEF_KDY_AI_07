@@ -2,7 +2,7 @@ name: Agentic AI CI (Python)
 
 on:
   push:
-    branches: [ main, 'feature/*', 'member-*/*' ]
+    branches: [ main, 'feature/*', 'member-*/*', 'IT*/**' ]
   pull_request:
     branches: [ main ]
 

@@ -8,7 +8,7 @@ Start with:
 The C# ClassificationAgentService posts to POST /api/classify and expects
 the ClassifyResponse JSON shape defined in classification/schemas.py.
 """
-
+from workflows.orchestrator import router as orchestrator_router
 import sys
 import os
 
@@ -29,6 +29,7 @@ app = FastAPI(
     ),
     version="1.0.0",
 )
+app.include_router(orchestrator_router)
 
 # Allow the ASP.NET Core backend to call this service from localhost
 app.add_middleware(

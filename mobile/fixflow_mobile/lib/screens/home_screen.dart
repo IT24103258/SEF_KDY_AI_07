@@ -63,6 +63,27 @@ class HomeScreen extends StatelessWidget {
                 label: 'My Requests',
                 onTap: () => Navigator.pushNamed(context, AppRouter.myRequests),
               ),
+              const SizedBox(height: 16),
+              Card(
+                child: ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Color(0xFFF59E0B),
+                    child: Icon(Icons.shield_outlined, color: Colors.white),
+                  ),
+                  title: const Text(
+                    'Risk & Priority Tracking',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: const Text(
+                    'View deterministic priority, SLAs & safety hazards',
+                  ),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 14),
+                  onTap: () => Navigator.pushNamed(
+                    context,
+                    AppRouter.priorityDetails,
+                  ),
+                ),
+              ),
             ] else ...[
               // Staff roles (Manager/Administrator/Technician) land here for now.
               // Other members: add your own quick actions in this block.

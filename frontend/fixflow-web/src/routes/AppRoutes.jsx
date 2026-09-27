@@ -31,6 +31,7 @@ import {
 
 
 import { getHomePath } from '../utils/roleRoutes';
+import { PriorityDashboard } from '../pages/PriorityDashboard';
 
 /*
 ================================================================================
@@ -260,20 +261,23 @@ export const AppRoutes = () => {
           ADD YOUR ROUTES ONLY IN THIS SECTION
           ============================================================ */}
 
-      {/* Example:
-
       <Route
-        path="/priority-dashboard"
+        path="/priorities"
         element={
-          <ProtectedRoute
-            roles={ADMIN_ROLES}
-          >
-            <RiskDashboardPage />
+          <ProtectedRoute roles={ADMIN_ROLES}>
+            <PriorityDashboard />
           </ProtectedRoute>
         }
       />
 
-      */}
+      <Route
+        path="/priority-dashboard"
+        element={
+          <ProtectedRoute roles={ADMIN_ROLES}>
+            <PriorityDashboard />
+          </ProtectedRoute>
+        }
+      />
 
 
       {/* ============================================================

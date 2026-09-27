@@ -18,6 +18,7 @@ public class RequestService : IRequestService
 {
     private readonly FixFlowDbContext _context;
     private readonly IClassificationAgentService _classificationAgent;
+    private readonly IPriorityAgentService _priorityAgent;
     private readonly ILogger<RequestService> _logger;
 
     // Roles that bypass the "own requests only" ownership gate
@@ -25,14 +26,16 @@ public class RequestService : IRequestService
         new(StringComparer.OrdinalIgnoreCase) { "Manager", "Administrator", "Technician" };
 
     public RequestService(
-        FixFlowDbContext context,
-        IClassificationAgentService classificationAgent,
-        ILogger<RequestService> logger)
-    {
-        _context = context;
-        _classificationAgent = classificationAgent;
-        _logger = logger;
-    }
+    FixFlowDbContext context,
+    IClassificationAgentService classificationAgent,
+    IPriorityAgentService priorityAgent,
+    ILogger<RequestService> logger)
+{
+    _context = context;
+    _classificationAgent = classificationAgent;
+    _priorityAgent = priorityAgent;
+    _logger = logger;
+}
 
     // ─────────────────────────────────────────────────────────────────────────
     // CREATE
@@ -214,11 +217,35 @@ public class RequestService : IRequestService
 
         // Advance status based on whether the result needs human review
         request.Status    = classification.RequiresReview ? RequestStatus.InReview : RequestStatus.Classified;
-        request.UpdatedAt = DateTime.UtcNow;
+request.UpdatedAt = DateTime.UtcNow;
 
-        await _context.SaveChangesAsync();
+await _context.SaveChangesAsync();
 
-        return MapClassificationToDto(classification, null);
+// Start Component 2 only when Component 1 produced a usable classification.
+// Requests requiring human review or falling back to "Uncategorized"
+// must not be automatically risk-assessed.
+if (!classification.RequiresReview &&
+    !string.Equals(classification.Category, "Uncategorized", StringComparison.OrdinalIgnoreCase))
+{
+    try
+    {
+        await _priorityAgent.EvaluateAndPersistAsync(
+            id,
+            null,
+            "PriorityAgent");
+    }
+    catch (Exception ex)
+    {
+        // Classification has already been safely persisted.
+        // Log the Component 2 failure without losing the request/classification.
+        _logger.LogError(
+            ex,
+            "PriorityAgent workflow failed for classified request {RequestId}.",
+            id);
+    }
+}
+
+return MapClassificationToDto(classification, null);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
