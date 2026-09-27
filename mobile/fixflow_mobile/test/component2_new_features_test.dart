@@ -680,10 +680,7 @@ void main() {
       ));
 
       final btn = tester.widget<ElevatedButton>(
-        find.ancestor(
-          of: find.text('De-escalate'),
-          matching: find.byType(ElevatedButton),
-        ),
+        find.byKey(const Key('deescalate_button')),
       );
       // onPressed is null when isLoading=true
       expect(btn.onPressed, isNull);
@@ -698,10 +695,7 @@ void main() {
       ));
 
       final btn = tester.widget<ElevatedButton>(
-        find.ancestor(
-          of: find.text('Escalate'),
-          matching: find.byType(ElevatedButton),
-        ),
+        find.byKey(const Key('escalate_button')),
       );
       expect(btn.onPressed, isNull);
     });
