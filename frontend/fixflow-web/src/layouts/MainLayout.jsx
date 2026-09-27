@@ -67,6 +67,12 @@ const navItems = [
     roles: ADMIN_ROLES
   },
   {
+    label: 'Request Queue',
+    path: '/request-queue',
+    icon: ClipboardList,
+    roles: ADMIN_ROLES
+  },
+  {
     label: 'My Work Orders',
     path: '/technician',
     icon: Wrench,

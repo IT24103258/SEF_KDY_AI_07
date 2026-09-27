@@ -117,9 +117,9 @@ builder.Services.AddSwaggerGen(c =>
 
 // ============================================================
 // MEMBER 1 — REQUEST INTAKE & CLASSIFICATION
-// ADD YOUR DI REGISTRATIONS ONLY IN THIS SECTION
 // ============================================================
-// Example: builder.Services.AddScoped<IIssueClassificationService, IssueClassificationService>();
+builder.Services.AddScoped<IRequestService, RequestService>();
+builder.Services.AddHttpClient<IClassificationAgentService, ClassificationAgentService>();
 
 
 // ============================================================
