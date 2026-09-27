@@ -511,7 +511,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
-                initialValue: selectedPriority,
+                value: selectedPriority,
                 decoration: const InputDecoration(
                   labelText: 'Priority Level',
                   border: OutlineInputBorder(),
@@ -614,7 +614,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
             decoration: BoxDecoration(
               border: Border.all(
                 color:
-                    Colors.grey.withValues(alpha: 0.35),
+                    Colors.grey.withOpacity( 0.35),
               ),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -691,7 +691,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
             decoration: BoxDecoration(
               border: Border.all(
                 color:
-                    Colors.grey.withValues(alpha: 0.35),
+                    Colors.grey.withOpacity( 0.35),
               ),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -930,7 +930,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                       BorderRadius.circular(12),
                   borderSide: BorderSide(
                     color: Colors.grey
-                        .withValues(alpha: 0.3),
+                        .withOpacity( 0.3),
                   ),
                 ),
                 enabledBorder: OutlineInputBorder(
@@ -938,7 +938,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                       BorderRadius.circular(12),
                   borderSide: BorderSide(
                     color: Colors.grey
-                        .withValues(alpha: 0.3),
+                        .withOpacity( 0.3),
                   ),
                 ),
                 focusedBorder: OutlineInputBorder(
@@ -954,8 +954,8 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                 filled: true,
                 fillColor: Theme.of(context)
                     .colorScheme
-                    .surfaceContainerHighest
-                    .withValues(alpha: 0.3),
+                    .surfaceVariant
+                    .withOpacity( 0.3),
                 contentPadding:
                     const EdgeInsets.symmetric(
                   horizontal: 16,
@@ -980,13 +980,13 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                 side: BorderSide(
                   color: Theme.of(context)
                       .dividerColor
-                      .withValues(alpha: 0.35),
+                      .withOpacity( 0.35),
                 ),
               ),
               color: Theme.of(context)
                   .colorScheme
-                  .surfaceContainerHighest
-                  .withValues(alpha: 0.25),
+                  .surfaceVariant
+                  .withOpacity( 0.25),
               child: Padding(
                 padding:
                     const EdgeInsets.fromLTRB(
@@ -1038,8 +1038,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                               color: Theme.of(context)
                                   .colorScheme
                                   .primary
-                                  .withValues(
-                                    alpha: 0.15,
+                                  .withOpacity( 0.15,
                                   ),
                               borderRadius:
                                   BorderRadius
@@ -1179,7 +1178,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                           BorderRadius.circular(12),
                       side: BorderSide(
                         color: Colors.indigo
-                            .withValues(alpha: 0.35),
+                            .withOpacity( 0.35),
                       ),
                     ),
                     elevation: 0.5,
@@ -1207,8 +1206,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                               decoration:
                                   BoxDecoration(
                                 color: Colors.indigo
-                                    .withValues(
-                                        alpha: 0.12),
+                                    .withOpacity( 0.12),
                                 borderRadius:
                                     BorderRadius.circular(
                                         8),
@@ -1257,7 +1255,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                           BorderRadius.circular(12),
                       side: BorderSide(
                         color: Colors.teal
-                            .withValues(alpha: 0.35),
+                            .withOpacity( 0.35),
                       ),
                     ),
                     elevation: 0.5,
@@ -1319,8 +1317,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                               decoration:
                                   BoxDecoration(
                                 color: Colors.teal
-                                    .withValues(
-                                        alpha: 0.12),
+                                    .withOpacity( 0.12),
                                 borderRadius:
                                     BorderRadius.circular(
                                         8),
@@ -1368,7 +1365,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
           if (_assessments.length > 1) ...[
             DropdownButtonFormField<
                 PriorityAssessmentModel>(
-              initialValue: item,
+              value: item,
               decoration:
                   const InputDecoration(
                 labelText:
@@ -1439,21 +1436,17 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                         decoration:
                             BoxDecoration(
                           color: item.escalationFlag
-                              ? Colors.red.withValues(
-                                  alpha: 0.12)
-                              : Colors.green.withValues(
-                                  alpha: 0.1),
+                              ? Colors.red.withOpacity( 0.12)
+                              : Colors.green.withOpacity( 0.1),
                           borderRadius:
                               BorderRadius.circular(6),
                           border: Border.all(
                             color:
                                 item.escalationFlag
                                     ? Colors.red
-                                        .withValues(
-                                            alpha: 0.4)
+                                        .withOpacity( 0.4)
                                     : Colors.green
-                                        .withValues(
-                                            alpha: 0.4),
+                                        .withOpacity( 0.4),
                           ),
                         ),
                         child: Text(
@@ -1537,8 +1530,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                         decoration:
                             BoxDecoration(
                           color: Colors.grey
-                              .withValues(
-                                  alpha: 0.1),
+                              .withOpacity( 0.1),
                           borderRadius:
                               BorderRadius.circular(6),
                         ),
@@ -1565,8 +1557,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                       decoration:
                           BoxDecoration(
                         color: Colors.amber
-                            .withValues(
-                                alpha: 0.15),
+                            .withOpacity( 0.15),
                         borderRadius:
                             BorderRadius.circular(8),
                         border: Border.all(
@@ -1610,8 +1601,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                       decoration:
                           BoxDecoration(
                         color: Colors.red
-                            .withValues(
-                                alpha: 0.12),
+                            .withOpacity( 0.12),
                         borderRadius:
                             BorderRadius.circular(8),
                         border: Border.all(
@@ -1657,14 +1647,12 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                       decoration:
                           BoxDecoration(
                         color: Colors.red
-                            .withValues(
-                                alpha: 0.08),
+                            .withOpacity( 0.08),
                         borderRadius:
                             BorderRadius.circular(8),
                         border: Border.all(
                           color: Colors.red
-                              .withValues(
-                                  alpha: 0.25),
+                              .withOpacity( 0.25),
                         ),
                       ),
                       child: Row(
@@ -1725,8 +1713,7 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                     decoration:
                         BoxDecoration(
                       color: Colors.grey
-                          .withValues(
-                              alpha: 0.08),
+                          .withOpacity( 0.08),
                       borderRadius:
                           BorderRadius.circular(6),
                     ),

@@ -148,14 +148,14 @@ class RiskMatrixWidget extends StatelessWidget {
                                     margin: const EdgeInsets.all(2),
                                     padding: const EdgeInsets.symmetric(vertical: 10),
                                     decoration: BoxDecoration(
-                                      color: color.withValues(alpha: 0.2),
+                                      color: color.withOpacity( 0.2),
                                       borderRadius: BorderRadius.circular(6),
                                       border: Border.all(
-                                        color: isHighlighted ? color : color.withValues(alpha: 0.4),
+                                        color: isHighlighted ? color : color.withOpacity( 0.4),
                                         width: isHighlighted ? 2.5 : 1,
                                       ),
                                       boxShadow: isHighlighted
-                                          ? [BoxShadow(color: color.withValues(alpha: 0.4), blurRadius: 8)]
+                                          ? [BoxShadow(color: color.withOpacity( 0.4), blurRadius: 8)]
                                           : null,
                                     ),
                                     child: Column(
@@ -167,7 +167,7 @@ class RiskMatrixWidget extends StatelessWidget {
                                         ),
                                         Text(
                                           level.toUpperCase(),
-                                          style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: color.withValues(alpha: 0.8), letterSpacing: 0.5),
+                                          style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold, color: color.withOpacity( 0.8), letterSpacing: 0.5),
                                         ),
                                       ],
                                     ),

@@ -118,9 +118,9 @@ class _RiskSimulatorScreenState extends State<RiskSimulatorScreen> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.blue.withValues(alpha: 0.12),
+                    color: Colors.blue.withOpacity( 0.12),
                     borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
+                    border: Border.all(color: Colors.blue.withOpacity( 0.3)),
                   ),
                   child: const Text('SANDBOX / READ-ONLY', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blue)),
                 ),
@@ -136,9 +136,9 @@ class _RiskSimulatorScreenState extends State<RiskSimulatorScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.1),
+                  color: Colors.red.withOpacity( 0.1),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                  border: Border.all(color: Colors.red.withOpacity( 0.3)),
                 ),
                 child: Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 13)),
               ),
@@ -266,7 +266,7 @@ class _RiskSimulatorScreenState extends State<RiskSimulatorScreen> {
         Text(label, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.grey)),
         const SizedBox(height: 4),
         DropdownButtonFormField<String>(
-          initialValue: value,
+          value: value,
           decoration: const InputDecoration(
             border: OutlineInputBorder(),
             contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -319,9 +319,9 @@ class _RiskSimulatorScreenState extends State<RiskSimulatorScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.grey.withValues(alpha: 0.06),
+                      color: Colors.grey.withOpacity( 0.06),
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+                      border: Border.all(color: Colors.grey.withOpacity( 0.2)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -352,9 +352,9 @@ class _RiskSimulatorScreenState extends State<RiskSimulatorScreen> {
                   child: Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.blue.withValues(alpha: 0.08),
+                      color: Colors.blue.withOpacity( 0.08),
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.blue.withValues(alpha: 0.4)),
+                      border: Border.all(color: Colors.blue.withOpacity( 0.4)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
