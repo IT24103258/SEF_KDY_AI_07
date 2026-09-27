@@ -6,8 +6,8 @@ public interface IPriorityAssessmentService
 {
     // Required 7 Business Operations
     string AssessAssetCriticality(string? assetCriticality, string? assetCategory);
-    string AssessImpact(string? impactOverride, bool hasSafetyHazard, string? disruptionScope);
-    string AssessLikelihood(string? likelihoodOverride, int recentFailures, int openRequests);
+    string AssessImpact(string? impactOverride, bool hasSafetyHazard, string? disruptionScope, string? disruptionInformation = null);
+    string AssessLikelihood(string? likelihoodOverride, int recentFailures, int openRequests, string? failureHistory = null);
     (int RiskScore, ContributingFactorsDto Factors) CalculateRiskScore(
         string criticality,
         string impact,
@@ -31,6 +31,7 @@ public interface IPriorityAssessmentService
     Task<PagedResult<PriorityAssessmentDto>> GetPriorityAssessmentsAsync(PriorityAssessmentSearchFilterDto filter);
     Task<PagedResult<PriorityAssessmentDto>> SearchPriorityAssessmentsAsync(PriorityAssessmentSearchFilterDto filter);
     Task<PriorityAssessmentDto> EscalateRequestAsync(Guid requestId, EscalateRequestDto dto, string escalatedBy);
+    Task<PriorityAssessmentDto> DeEscalateRequestAsync(Guid requestId, DeEscalateRequestDto dto, string deEscalatedBy);
     Task<PriorityAssessmentDto> GetRiskAssessmentAsync(Guid requestId);
     Task<PriorityAssessmentDto> SaveAgentAssessmentAsync(Guid requestId, PriorityAgentResultDto agentResult, string assessedBy);
 }

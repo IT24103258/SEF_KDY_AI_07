@@ -38,6 +38,17 @@ public class PrioritiesController : ControllerBase
         Guid id,
         [FromBody] CreatePriorityAssessmentDto? dto)
     {
+        // Issue B: Secure RBAC check — only Administrator or Manager are privileged.
+        // A missing or unknown role claim MUST NOT be treated as privileged.
+        bool isPrivileged = User.IsInRole("Administrator") || User.IsInRole("Manager");
+        if (!isPrivileged && dto != null)
+        {
+            dto.AssetCriticalityOverride = null;
+            dto.ImpactOverride = null;
+            dto.LikelihoodOverride = null;
+            dto.HasSafetyHazard = null;
+        }
+
         var userEmail = User.FindFirst(ClaimTypes.Email)?.Value ?? "PriorityService";
         var result = await _priorityService.CreatePriorityAssessmentAsync(id, dto, userEmail);
         return Ok(ApiResponse<PriorityAssessmentDto>.SuccessResult(result, "Priority assessment evaluated and recorded successfully."));
@@ -80,16 +91,31 @@ public class PrioritiesController : ControllerBase
     }
 
     /// <summary>
-    /// 6. Trigger risk escalation for a maintenance request
+    /// 6. Trigger risk escalation for a maintenance request (Administrator & Manager only)
     /// </summary>
     [HttpPost("requests/{id}/escalate")]
+    [Authorize(Roles = "Administrator,Manager")]
     public async Task<ActionResult<ApiResponse<PriorityAssessmentDto>>> EscalateRequest(
         Guid id,
         [FromBody] EscalateRequestDto dto)
     {
-        var userEmail = User.FindFirst(ClaimTypes.Email)?.Value ?? "User";
+        var userEmail = User.FindFirst(ClaimTypes.Email)?.Value ?? "Manager";
         var result = await _priorityService.EscalateRequestAsync(id, dto, userEmail);
         return Ok(ApiResponse<PriorityAssessmentDto>.SuccessResult(result, "Request escalated successfully."));
+    }
+
+    /// <summary>
+    /// 6b. Safely de-escalate a maintenance request with authoritative recalculation and audit (Administrator & Manager only)
+    /// </summary>
+    [HttpPost("requests/{id}/de-escalate")]
+    [Authorize(Roles = "Administrator,Manager")]
+    public async Task<ActionResult<ApiResponse<PriorityAssessmentDto>>> DeEscalateRequest(
+        Guid id,
+        [FromBody] DeEscalateRequestDto dto)
+    {
+        var userEmail = User.FindFirst(ClaimTypes.Email)?.Value ?? "Manager";
+        var result = await _priorityService.DeEscalateRequestAsync(id, dto, userEmail);
+        return Ok(ApiResponse<PriorityAssessmentDto>.SuccessResult(result, "Request de-escalated successfully."));
     }
 
     /// <summary>

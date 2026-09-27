@@ -31,6 +31,17 @@ public class PriorityAgentController : ControllerBase
         Guid id,
         [FromBody] PriorityAgentEvaluationRequestDto? dto)
     {
+        // Issue B: Secure RBAC check — only Administrator or Manager are privileged.
+        // A missing or unknown role claim MUST NOT be treated as privileged.
+        bool isPrivileged = User.IsInRole("Administrator") || User.IsInRole("Manager");
+        if (!isPrivileged && dto != null)
+        {
+            dto.AssetCriticalityOverride = null;
+            dto.ImpactOverride = null;
+            dto.LikelihoodOverride = null;
+            dto.HasSafetyHazard = null;
+        }
+
         var userEmail = User.FindFirst(ClaimTypes.Email)?.Value ?? "PriorityAgent";
         var result = await _priorityAgentService.EvaluateAndPersistAsync(id, dto, $"PriorityAgent ({userEmail})");
         return Ok(ApiResponse<PriorityAssessmentDto>.SuccessResult(result, "Priority assessment evaluated by PriorityAgent and persisted successfully."));
@@ -44,6 +55,18 @@ public class PriorityAgentController : ControllerBase
         Guid id,
         [FromBody] PriorityAgentEvaluationRequestDto? dto)
     {
+        // Issue 9: Preview must obey the SAME RBAC as the persisted assess endpoint.
+        // Manual overrides (criticality/impact/likelihood/hazard) are a privileged capability;
+        // a non-privileged caller must not be able to influence the previewed risk calculation.
+        bool isPrivileged = User.IsInRole("Administrator") || User.IsInRole("Manager");
+        if (!isPrivileged && dto != null)
+        {
+            dto.AssetCriticalityOverride = null;
+            dto.ImpactOverride = null;
+            dto.LikelihoodOverride = null;
+            dto.HasSafetyHazard = null;
+        }
+
         var result = await _priorityAgentService.EvaluateAgentAsync(id, dto);
         return Ok(ApiResponse<PriorityAgentResultDto>.SuccessResult(result, "PriorityAgent calculation completed (preview mode)."));
     }

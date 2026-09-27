@@ -111,6 +111,46 @@ export const RiskScoreCard = ({ assessment, onSimulate, onEscalate }) => {
         </div>
       </div>
 
+      {/* Non-Blocking Human Approval Signal */}
+      {assessment.humanApprovalRequired && (
+        <div
+          style={{
+            display: 'flex',
+            gap: '0.75rem',
+            padding: '0.75rem 1rem',
+            background: 'rgba(245, 158, 11, 0.1)',
+            borderLeft: '4px solid #f59e0b',
+            borderRadius: '4px',
+            marginBottom: '1rem'
+          }}
+        >
+          <ShieldAlert size={18} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '2px' }} />
+          <div style={{ fontSize: '0.85rem', lineHeight: 1.4, color: '#f59e0b' }}>
+            <strong>Human Approval Required (Non-Blocking Signal):</strong> High-risk or escalated assessment flagged for human review before final dispatch. (Workflow continues downstream to Component 3 and Component 4).
+          </div>
+        </div>
+      )}
+
+      {/* Assessment Failed State */}
+      {assessment.status === 'FAILED' && (
+        <div
+          style={{
+            display: 'flex',
+            gap: '0.75rem',
+            padding: '0.75rem 1rem',
+            background: 'rgba(239, 68, 68, 0.1)',
+            borderLeft: '4px solid #ef4444',
+            borderRadius: '4px',
+            marginBottom: '1rem'
+          }}
+        >
+          <AlertTriangle size={18} style={{ color: '#ef4444', flexShrink: 0, marginTop: '2px' }} />
+          <div style={{ fontSize: '0.85rem', lineHeight: 1.4, color: '#ef4444' }}>
+            <strong>Assessment Failed:</strong> Agent execution encountered a failure and safe-failure protocol was engaged. Requires manual dispatcher review.
+          </div>
+        </div>
+      )}
+
       {/* Safety Hazard Warning */}
       {factors.hasSafetyHazard && (
         <div

@@ -18,6 +18,8 @@ class PriorityAssessmentModel {
   final String? escalationReason;
   final String explanation;
   final String status;
+  final bool humanApprovalRequired;
+  final bool hazardDetected;
 
   PriorityAssessmentModel({
     required this.id,
@@ -39,6 +41,8 @@ class PriorityAssessmentModel {
     this.escalationReason,
     required this.explanation,
     required this.status,
+    this.humanApprovalRequired = false,
+    this.hazardDetected = false,
   });
 
   factory PriorityAssessmentModel.fromJson(Map<String, dynamic> json) {
@@ -62,6 +66,8 @@ class PriorityAssessmentModel {
       escalationReason: json['escalationReason'],
       explanation: json['explanation'] ?? '',
       status: json['status'] ?? 'Active',
+      humanApprovalRequired: json['humanApprovalRequired'] ?? false,
+      hazardDetected: json['hazardDetected'] ?? false,
     );
   }
 }

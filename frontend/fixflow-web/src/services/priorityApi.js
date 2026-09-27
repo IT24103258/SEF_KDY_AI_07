@@ -4,8 +4,12 @@ export const priorityApi = {
   // 1. Get priority assessment by request ID
   getPriorityByRequestId: (requestId) => api.get(`/priorities/${requestId}`),
 
-  // 2. Create priority assessment for request ID
+  // 2. Create priority assessment for request ID (legacy/C# path)
   createPriorityAssessment: (requestId, data = {}) => api.post(`/requests/${requestId}/priority-assessments`, data),
+
+  // 2b. Run/re-run assessment via Priority Agent (production agentic path)
+  runAgentAssessment: (requestId, data = {}) =>
+    api.post(`/requests/${requestId}/priority-agent/assess`, data),
 
   // 3. Update priority assessment (Manager override)
   updatePriorityAssessment: (assessmentId, data) => api.put(`/priority-assessments/${assessmentId}`, data),
@@ -18,6 +22,7 @@ export const priorityApi = {
     if (params.riskLevel) query.append('riskLevel', params.riskLevel);
     if (params.assetCriticality) query.append('assetCriticality', params.assetCriticality);
     if (params.escalatedOnly) query.append('escalatedOnly', 'true');
+    if (params.sortBy) query.append('sortBy', params.sortBy);
     if (params.page) query.append('page', params.page);
     if (params.pageSize) query.append('pageSize', params.pageSize);
 
@@ -31,6 +36,7 @@ export const priorityApi = {
     if (params.searchTerm) query.append('searchTerm', params.searchTerm);
     if (params.priority) query.append('priority', params.priority);
     if (params.riskLevel) query.append('riskLevel', params.riskLevel);
+    if (params.sortBy) query.append('sortBy', params.sortBy);
     if (params.page) query.append('page', params.page);
     if (params.pageSize) query.append('pageSize', params.pageSize);
 
@@ -38,8 +44,11 @@ export const priorityApi = {
     return api.get(`/priority-assessments/search${queryString ? `?${queryString}` : ''}`);
   },
 
-  // 6. Escalate request
+  // 6. Escalate request (Manager/Admin only)
   escalateRequest: (requestId, data) => api.post(`/requests/${requestId}/escalate`, data),
+
+  // 6b. De-escalate request with authoritative recalculation (Manager/Admin only)
+  deEscalateRequest: (requestId, data) => api.post(`/requests/${requestId}/de-escalate`, data),
 
   // 7. Get risk assessment details
   getRiskAssessment: (requestId) => api.get(`/requests/${requestId}/risk-assessment`),

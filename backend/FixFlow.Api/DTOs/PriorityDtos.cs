@@ -23,6 +23,8 @@ public class PriorityAssessmentDto
     public ContributingFactorsDto ContributingFactors { get; set; } = new();
     public string AssessedBy { get; set; } = string.Empty;
     public string Status { get; set; } = "Active";
+    public bool HazardDetected { get; set; }
+    public bool HumanApprovalRequired { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 }
@@ -42,14 +44,29 @@ public class ContributingFactorsDto
     public string OperationalDisruption { get; set; } = "Normal";
 }
 
+/// <summary>
+/// Component 1 -> Component 2 Input Contract.
+/// Component 1 supplies raw incident/request facts; Component 2 determines risk and priority.
+/// </summary>
 public class CreatePriorityAssessmentDto
 {
+    // Raw incident / request facts supplied by Component 1
+    public string? AssetCategory { get; set; }
+    public string? DisruptionInformation { get; set; }
+    public string? DisruptionScope { get; set; }
+    public string? FailureHistory { get; set; }
+    public int? RecentFailureCount { get; set; }
+    public string? LocationInfo { get; set; }
+    public bool? HighDensityLocation { get; set; }
+    public string? HazardDetails { get; set; }
+    public string? Notes { get; set; }
+
+    // Controlled / Test-only overrides (optional internal/test controls for golden test calibration).
+    // These are NOT required in the normal Component 1 production contract.
     public string? AssetCriticalityOverride { get; set; }
     public string? ImpactOverride { get; set; }
     public string? LikelihoodOverride { get; set; }
     public bool? HasSafetyHazard { get; set; }
-    public string? DisruptionScope { get; set; }
-    public string? Notes { get; set; }
 }
 
 public class UpdatePriorityAssessmentDto
@@ -65,6 +82,12 @@ public class EscalateRequestDto
 {
     public string Reason { get; set; } = string.Empty;
     public bool ImmediateHazard { get; set; } = false;
+    public string? Notes { get; set; }
+}
+
+public class DeEscalateRequestDto
+{
+    public string Reason { get; set; } = string.Empty;
     public string? Notes { get; set; }
 }
 
@@ -107,6 +130,10 @@ public class PriorityAssessmentSearchFilterDto
     public string? RiskLevel { get; set; }
     public bool? EscalatedOnly { get; set; }
     public string? AssetCriticality { get; set; }
+    /// <summary>
+    /// Deterministic sort key: newest (default), oldest, risk_desc/risk_asc, priority_desc/priority_asc.
+    /// </summary>
+    public string? SortBy { get; set; }
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 10;
 }

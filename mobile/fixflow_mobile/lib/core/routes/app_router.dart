@@ -4,6 +4,8 @@ import '../../screens/home_screen.dart';
 import '../../screens/profile_screen.dart';
 import '../../screens/notifications_screen.dart';
 import '../../screens/priority_details_screen.dart';
+import '../../screens/risk_matrix_screen.dart';
+import '../../screens/risk_simulator_screen.dart';
 
 /*
 ================================================================================
@@ -34,6 +36,8 @@ class AppRouter {
   // MEMBER 2 ROUTE CONSTANTS — RISK & PRIORITY ASSESSMENT
   // ============================================================
   static const String priorityDetails = '/priority-details';
+  static const String riskMatrix = '/risk-matrix';
+  static const String riskSimulator = '/risk-simulator';
 
 
   // ============================================================
@@ -72,6 +76,21 @@ class AppRouter {
       // ============================================================
       case priorityDetails:
         return MaterialPageRoute(builder: (_) => const PriorityDetailsScreen());
+
+      case riskMatrix:
+        return MaterialPageRoute(builder: (_) => const RiskMatrixScreen());
+
+      case riskSimulator:
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        return MaterialPageRoute(
+          builder: (_) => RiskSimulatorScreen(
+            requestId: args['requestId'] ?? '',
+            requestNumber: args['requestNumber'] ?? '',
+            initialCriticality: args['assetCriticality'],
+            initialImpact: args['impactLevel'],
+            initialLikelihood: args['likelihoodLevel'],
+          ),
+        );
 
 
       // ============================================================

@@ -57,8 +57,9 @@ public class PriorityAssessmentService : IPriorityAssessmentService
 
     /// <summary>
     /// Assesses impact on building operations, life safety, and resident welfare.
+    /// Supports both structured disruption scope and raw disruption information text analysis.
     /// </summary>
-    public string AssessImpact(string? impactOverride, bool hasSafetyHazard, string? disruptionScope)
+    public string AssessImpact(string? impactOverride, bool hasSafetyHazard, string? disruptionScope, string? disruptionInformation = null)
     {
         if (hasSafetyHazard)
         {
@@ -83,18 +84,101 @@ public class PriorityAssessmentService : IPriorityAssessmentService
             return "High";
         }
 
-        if (string.Equals(disruptionScope, "Multi-Unit", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(disruptionScope, "Single-Unit", StringComparison.OrdinalIgnoreCase))
         {
-            return "Medium";
+            return "Low";
+        }
+
+        // Derive from disruption information text facts if provided
+        if (!string.IsNullOrWhiteSpace(disruptionInformation))
+        {
+            var dText = disruptionInformation.ToLowerInvariant();
+            if (dText.Contains("building-wide") || dText.Contains("tower-wide") || dText.Contains("entire building") || dText.Contains("total outage") || dText.Contains("blackout"))
+                return "Critical";
+            if (dText.Contains("floor-wide") || dText.Contains("common area") || dText.Contains("partial power") || dText.Contains("intermittent") || dText.Contains("corridor"))
+                return "High";
+            if (dText.Contains("multi-unit") || dText.Contains("several units") || dText.Contains("multiple"))
+                return "Medium";
+            if (dText.Contains("single") || dText.Contains("isolated") || dText.Contains("minor") || dText.Contains("routine"))
+                return "Low";
         }
 
         return "Low";
     }
 
+    public string AssessImpact(string? impactOverride, bool hasSafetyHazard, string? disruptionScope)
+        => AssessImpact(impactOverride, hasSafetyHazard, disruptionScope, null);
+
     /// <summary>
-    /// Assesses the likelihood of incident escalation or recurrence based on historical frequency.
+    /// Evaluates raw incident/request facts (title, description, hazard details, disruption info) to detect safety hazards.
+    /// Component 2 is responsible for determining hazard detection from facts.
+    /// Handles negation phrases (e.g., "no gas leak", "checked for smoke - none", "non-hazardous") to avoid false positives.
     /// </summary>
-    public string AssessLikelihood(string? likelihoodOverride, int recentFailures, int openRequests)
+    public static bool DetectHazard(string? title, string? description, string? hazardDetails = null, string? disruption = null)
+    {
+        var rawText = $"{title} {description} {hazardDetails} {disruption}".Trim();
+        if (string.IsNullOrWhiteSpace(rawText))
+        {
+            return false;
+        }
+
+        // Split text into clauses/sentences to evaluate negation locally per clause
+        var clauses = rawText.Split(new[] { '.', ';', '\n', '\r', '!', '?' }, StringSplitOptions.RemoveEmptyEntries);
+
+        foreach (var clause in clauses)
+        {
+            var text = clause.Trim().ToLowerInvariant();
+
+            // Negation check: if clause says "no ...", "not ...", "none", "without", "zero", "non-hazardous"
+            bool isNegated = text.Contains("no gas") || text.Contains("no smoke") || text.Contains("no spark") ||
+                             text.Contains("no fire") || text.Contains("no leak") || text.Contains("no hazard") ||
+                             text.Contains("not hazardous") || text.Contains("non-hazardous") || text.Contains("non hazardous") ||
+                             text.Contains("none detected") || text.Contains("none found") || text.Contains("no water") ||
+                             text.Contains("zero hazard") || text.Contains("without any hazard") || text.Contains("without hazard") ||
+                             text.Contains("without leak") || text.Contains("clear of gas") || text.Contains("clear of smoke") ||
+                             text.Contains("not a hazard") || text.Contains("hazard: none") || text.Contains("hazard: no");
+
+            if (isNegated)
+            {
+                continue;
+            }
+
+            // 1. Direct severe hazard keywords
+            if (text.Contains("gas leak") || text.Contains("gas smell") || text.Contains("gas odour") || text.Contains("gas odor") ||
+                text.Contains("spark") || text.Contains("smoke") || text.Contains("fire") || text.Contains("explosion") ||
+                text.Contains("electric shock") || text.Contains("live wire") || text.Contains("exposed wire") ||
+                text.Contains("structural collapse") || text.Contains("chemical spill") || text.Contains("hazard"))
+            {
+                return true;
+            }
+
+            // Standalone "gas", "leak" check if not negated
+            if (text.Contains("gas") && !text.Contains("gas stove routine") && !text.Contains("gas meter reading"))
+            {
+                return true;
+            }
+
+            // 2. Water / leak near electrical equipment (e.g. "Water leaking near exposed electrical equipment")
+            if ((text.Contains("water") || text.Contains("leak") || text.Contains("flood")) &&
+                (text.Contains("electric") || text.Contains("power") || text.Contains("panel") || text.Contains("wiring")))
+            {
+                return true;
+            }
+
+            // 3. Trapped persons
+            if (text.Contains("trapped") || (text.Contains("stuck") && text.Contains("passenger")))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Assesses the likelihood of incident escalation or recurrence based on historical frequency and failure history facts.
+    /// </summary>
+    public string AssessLikelihood(string? likelihoodOverride, int recentFailures, int openRequests, string? failureHistory = null)
     {
         if (!string.IsNullOrWhiteSpace(likelihoodOverride))
         {
@@ -102,7 +186,19 @@ public class PriorityAssessmentService : IPriorityAssessmentService
             if (normalized != null) return normalized;
         }
 
-        int riskSignals = recentFailures + openRequests;
+        int historySignals = 0;
+        if (!string.IsNullOrWhiteSpace(failureHistory))
+        {
+            var hText = failureHistory.ToLowerInvariant();
+            if (hText.Contains("twice") || hText.Contains("two times") || hText.Contains("2 times") || hText.Contains("recurring") || hText.Contains("repeated") || hText.Contains("second time"))
+                historySignals += 2;
+            else if (hText.Contains("three times") || hText.Contains("3 times") || hText.Contains("4 times") || hText.Contains("frequent") || hText.Contains("multiple times") || hText.Contains("daily"))
+                historySignals += 4;
+            else if (hText.Contains("once") || hText.Contains("previous") || hText.Contains("earlier"))
+                historySignals += 1;
+        }
+
+        int riskSignals = recentFailures + openRequests + historySignals;
 
         if (riskSignals >= 4) return "Critical";
         if (riskSignals >= 2) return "High";
@@ -110,6 +206,9 @@ public class PriorityAssessmentService : IPriorityAssessmentService
 
         return "Low";
     }
+
+    public string AssessLikelihood(string? likelihoodOverride, int recentFailures, int openRequests)
+        => AssessLikelihood(likelihoodOverride, recentFailures, openRequests, null);
 
     /// <summary>
     /// Calculates deterministic risk score (1 - 100) using matrix weights and modifiers.
@@ -376,8 +475,9 @@ public class PriorityAssessmentService : IPriorityAssessmentService
 
         if (assessment == null)
         {
-            // If not yet assessed, perform an on-demand calculation
-            return await CreatePriorityAssessmentAsync(requestId, null, "Auto-Evaluator");
+            // A GET must never create data. Assessment creation happens through
+            // POST /api/requests/{id}/priority-assessments or the PriorityAgent endpoints.
+            throw new NotFoundException($"No priority assessment exists for request '{requestId}'. Create one via POST /api/requests/{requestId}/priority-assessments.");
         }
 
         return MapToDto(assessment, request);
@@ -396,19 +496,14 @@ public class PriorityAssessmentService : IPriorityAssessmentService
             throw new NotFoundException($"Maintenance request with ID '{requestId}' was not found.");
         }
 
-        // Assess input factors
+        // Assess input factors - Component 2 derives factors from raw facts; test overrides used only when explicitly provided
         string criticality = AssessAssetCriticality(
             dto?.AssetCriticalityOverride ?? request.Asset?.Criticality,
-            request.Asset?.Category);
+            dto?.AssetCategory ?? request.Asset?.Category);
 
-        bool hasSafetyHazard = dto?.HasSafetyHazard ?? (
-            request.Title.Contains("gas", StringComparison.OrdinalIgnoreCase) ||
-            request.Title.Contains("spark", StringComparison.OrdinalIgnoreCase) ||
-            request.Title.Contains("smoke", StringComparison.OrdinalIgnoreCase) ||
-            request.Title.Contains("leak", StringComparison.OrdinalIgnoreCase) ||
-            request.Title.Contains("hazard", StringComparison.OrdinalIgnoreCase));
+        bool hasSafetyHazard = dto?.HasSafetyHazard ?? DetectHazard(request.Title, request.Description, dto?.HazardDetails, dto?.DisruptionInformation);
 
-        string impact = AssessImpact(dto?.ImpactOverride, hasSafetyHazard, dto?.DisruptionScope);
+        string impact = AssessImpact(dto?.ImpactOverride, hasSafetyHazard, dto?.DisruptionScope, dto?.DisruptionInformation);
 
         // Count open requests for this asset
         int openRequestsForAsset = 0;
@@ -418,12 +513,13 @@ public class PriorityAssessmentService : IPriorityAssessmentService
                 .CountAsync(r => r.AssetId == request.AssetId && r.Id != request.Id && r.Status != RequestStatus.Completed && r.Status != RequestStatus.Cancelled);
         }
 
-        string likelihood = AssessLikelihood(dto?.LikelihoodOverride, 0, openRequestsForAsset);
+        int recentFailures = dto?.RecentFailureCount ?? 0;
+        string likelihood = AssessLikelihood(dto?.LikelihoodOverride, recentFailures, openRequestsForAsset, dto?.FailureHistory);
 
-        bool isHighDensity = request.Location?.Building == "Common Areas" ||
-                             (request.Location?.Room != null && request.Location.Room.Contains("Lobby", StringComparison.OrdinalIgnoreCase));
+        bool isHighDensity = dto?.HighDensityLocation ?? (request.Location?.Building == "Common Areas" ||
+                             (request.Location?.Room != null && request.Location.Room.Contains("Lobby", StringComparison.OrdinalIgnoreCase)));
 
-        var (score, factors) = CalculateRiskScore(criticality, impact, likelihood, hasSafetyHazard, 0, isHighDensity);
+        var (score, factors) = CalculateRiskScore(criticality, impact, likelihood, hasSafetyHazard, recentFailures, isHighDensity);
         string riskLevel = DetermineRiskLevel(score);
 
         var (priority, respHours, resHours, respWindow, escalationFlag) = CalculatePriorityAndSLA(
@@ -519,24 +615,75 @@ public class PriorityAssessmentService : IPriorityAssessmentService
             .Include(r => r.Location)
             .FirstOrDefaultAsync(r => r.Id == assessment.RequestId);
 
+        // Server-side validation: prevent contradictory Priority and RiskLevel overrides
+        if (!string.IsNullOrWhiteSpace(dto.Priority) && !string.IsNullOrWhiteSpace(dto.RiskLevel))
+        {
+            if ((dto.Priority == "Low" && (dto.RiskLevel == "Critical" || dto.RiskLevel == "High")) ||
+                ((dto.Priority == "Critical" || dto.Priority == "High") && dto.RiskLevel == "Low"))
+            {
+                throw new InvalidOperationException($"Contradictory override: Priority '{dto.Priority}' cannot be combined with RiskLevel '{dto.RiskLevel}'.");
+            }
+        }
+
         if (!string.IsNullOrWhiteSpace(dto.Priority))
         {
             assessment.Priority = dto.Priority;
-        }
+            assessment.RiskLevel = !string.IsNullOrWhiteSpace(dto.RiskLevel) ? dto.RiskLevel : dto.Priority;
 
-        if (!string.IsNullOrWhiteSpace(dto.RiskLevel))
+            // Recalculate authoritative SLA dependent fields
+            var (respHours, resHours, respWindow) = assessment.Priority switch
+            {
+                "Critical" => (1, 4, "Immediate (Within 1 hour)"),
+                "High" => (2, 8, "Within 2 hours"),
+                "Medium" => (4, 24, "Within 4 hours"),
+                _ => (8, 48, "Within 8 hours")
+            };
+
+            assessment.ResponseTimeHours = respHours;
+            assessment.ResolutionTimeHours = resHours;
+            assessment.RecommendedResponseWindow = respWindow;
+
+            // Synchronize score band to match risk level
+            assessment.RiskScore = assessment.RiskLevel switch
+            {
+                "Critical" => Math.Clamp(assessment.RiskScore >= 76 ? assessment.RiskScore : 85, 76, 100),
+                "High" => Math.Clamp(assessment.RiskScore >= 51 && assessment.RiskScore <= 75 ? assessment.RiskScore : 60, 51, 75),
+                "Medium" => Math.Clamp(assessment.RiskScore >= 26 && assessment.RiskScore <= 50 ? assessment.RiskScore : 35, 26, 50),
+                _ => Math.Clamp(assessment.RiskScore <= 25 ? assessment.RiskScore : 15, 1, 25)
+            };
+        }
+        else if (!string.IsNullOrWhiteSpace(dto.RiskLevel))
         {
             assessment.RiskLevel = dto.RiskLevel;
+            assessment.RiskScore = assessment.RiskLevel switch
+            {
+                "Critical" => Math.Clamp(assessment.RiskScore >= 76 ? assessment.RiskScore : 85, 76, 100),
+                "High" => Math.Clamp(assessment.RiskScore >= 51 && assessment.RiskScore <= 75 ? assessment.RiskScore : 60, 51, 75),
+                "Medium" => Math.Clamp(assessment.RiskScore >= 26 && assessment.RiskScore <= 50 ? assessment.RiskScore : 35, 26, 50),
+                _ => Math.Clamp(assessment.RiskScore <= 25 ? assessment.RiskScore : 15, 1, 25)
+            };
         }
 
         if (dto.EscalationFlag.HasValue)
         {
             assessment.EscalationFlag = dto.EscalationFlag.Value;
         }
+        else if (!string.IsNullOrWhiteSpace(dto.Priority))
+        {
+            assessment.EscalationFlag = assessment.Priority == "Critical";
+        }
 
         if (dto.EscalationReason != null)
         {
             assessment.EscalationReason = dto.EscalationReason;
+        }
+        else if (assessment.EscalationFlag && string.IsNullOrEmpty(assessment.EscalationReason))
+        {
+            assessment.EscalationReason = "Escalated by manager override";
+        }
+        else if (!assessment.EscalationFlag)
+        {
+            assessment.EscalationReason = null;
         }
 
         if (!string.IsNullOrWhiteSpace(dto.Explanation))
@@ -544,7 +691,7 @@ public class PriorityAssessmentService : IPriorityAssessmentService
             assessment.Explanation = dto.Explanation;
         }
 
-        assessment.Status = "Overridden";
+        assessment.Status = assessment.EscalationFlag ? "Escalated" : "Overridden";
         assessment.AssessedBy = $"{updatedBy} (Manager Override)";
         assessment.UpdatedAt = DateTime.UtcNow;
 
@@ -571,62 +718,87 @@ public class PriorityAssessmentService : IPriorityAssessmentService
 
     public async Task<PagedResult<PriorityAssessmentDto>> SearchPriorityAssessmentsAsync(PriorityAssessmentSearchFilterDto filter)
     {
-        var query = _context.Set<PriorityAssessment>()
+        var baseQuery = _context.Set<PriorityAssessment>()
             .Where(p => !p.IsDeleted)
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(filter.Priority))
         {
-            query = query.Where(p => p.Priority == filter.Priority);
+            baseQuery = baseQuery.Where(p => p.Priority == filter.Priority);
         }
 
         if (!string.IsNullOrWhiteSpace(filter.RiskLevel))
         {
-            query = query.Where(p => p.RiskLevel == filter.RiskLevel);
+            baseQuery = baseQuery.Where(p => p.RiskLevel == filter.RiskLevel);
         }
 
         if (!string.IsNullOrWhiteSpace(filter.AssetCriticality))
         {
-            query = query.Where(p => p.AssetCriticality == filter.AssetCriticality);
+            baseQuery = baseQuery.Where(p => p.AssetCriticality == filter.AssetCriticality);
         }
 
         if (filter.EscalatedOnly == true)
         {
-            query = query.Where(p => p.EscalationFlag);
+            baseQuery = baseQuery.Where(p => p.EscalationFlag);
         }
 
-        int totalCount = await query.CountAsync();
+        // Database join to allow SearchTerm filtering BEFORE CountAsync and Skip/Take
+        var joinedQuery = from p in baseQuery
+                          join r in _context.MaintenanceRequests.Where(req => !req.IsDeleted)
+                              on p.RequestId equals r.Id into reqGroup
+                          from req in reqGroup.DefaultIfEmpty()
+                          select new { Assessment = p, Request = req };
+
+        if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
+        {
+            var term = filter.SearchTerm.Trim().ToLower();
+            joinedQuery = joinedQuery.Where(x =>
+                (x.Request != null && x.Request.RequestNumber.ToLower().Contains(term)) ||
+                (x.Request != null && x.Request.Title.ToLower().Contains(term)) ||
+                (x.Assessment.Explanation != null && x.Assessment.Explanation.ToLower().Contains(term)));
+        }
+
+        // 1. Calculate TotalCount AFTER search & filters
+        int totalCount = await joinedQuery.CountAsync();
         int page = filter.Page > 0 ? filter.Page : 1;
         int pageSize = filter.PageSize > 0 ? filter.PageSize : 10;
 
-        var items = await query
-            .OrderByDescending(p => p.CreatedAt)
+        // 2. Apply deterministic sorting, then pagination AFTER filtering
+        var sortBy = (filter.SortBy ?? string.Empty).Trim().ToLowerInvariant();
+        var sorted = sortBy switch
+        {
+            "oldest" => joinedQuery.OrderBy(x => x.Assessment.CreatedAt),
+            "risk_desc" or "highest_risk" => joinedQuery.OrderByDescending(x => x.Assessment.RiskScore),
+            "risk_asc" or "lowest_risk" => joinedQuery.OrderBy(x => x.Assessment.RiskScore),
+            "priority_desc" or "highest_priority" => joinedQuery
+                .OrderByDescending(x => x.Assessment.Priority == "Critical" ? 4
+                    : x.Assessment.Priority == "High" ? 3
+                    : x.Assessment.Priority == "Medium" ? 2 : 1),
+            "priority_asc" or "lowest_priority" => joinedQuery
+                .OrderBy(x => x.Assessment.Priority == "Critical" ? 4
+                    : x.Assessment.Priority == "High" ? 3
+                    : x.Assessment.Priority == "Medium" ? 2 : 1),
+            _ => joinedQuery.OrderByDescending(x => x.Assessment.CreatedAt) // newest first
+        };
+
+        var pageItems = await sorted
+            .ThenBy(x => x.Assessment.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync();
 
-        var requestIds = items.Select(i => i.RequestId).Distinct().ToList();
-        var requests = await _context.MaintenanceRequests
+        var requestIds = pageItems.Select(x => x.Assessment.RequestId).Distinct().ToList();
+        var fullRequests = await _context.MaintenanceRequests
             .Include(r => r.Asset)
             .Include(r => r.Location)
             .Where(r => requestIds.Contains(r.Id))
             .ToDictionaryAsync(r => r.Id);
 
-        var dtos = items.Select(item =>
+        var dtos = pageItems.Select(x =>
         {
-            requests.TryGetValue(item.RequestId, out var req);
-            return MapToDto(item, req);
+            fullRequests.TryGetValue(x.Assessment.RequestId, out var req);
+            return MapToDto(x.Assessment, req ?? x.Request);
         }).ToList();
-
-        if (!string.IsNullOrWhiteSpace(filter.SearchTerm))
-        {
-            var term = filter.SearchTerm.ToLower();
-            dtos = dtos.Where(d =>
-                d.RequestNumber.ToLower().Contains(term) ||
-                d.RequestTitle.ToLower().Contains(term) ||
-                (d.AssetName != null && d.AssetName.ToLower().Contains(term)) ||
-                d.Explanation.ToLower().Contains(term)).ToList();
-        }
 
         return new PagedResult<PriorityAssessmentDto>
         {
@@ -642,6 +814,7 @@ public class PriorityAssessmentService : IPriorityAssessmentService
         var request = await _context.MaintenanceRequests
             .Include(r => r.Asset)
             .Include(r => r.Location)
+            .Include(r => r.Category)
             .FirstOrDefaultAsync(r => r.Id == requestId && !r.IsDeleted);
 
         if (request == null)
@@ -656,41 +829,69 @@ public class PriorityAssessmentService : IPriorityAssessmentService
 
         if (assessment == null)
         {
-            // Create assessment first with hazard flag
-            var createDto = new CreatePriorityAssessmentDto
+            // Run the real deterministic assessment first — never fabricate a risk score.
+            await CreatePriorityAssessmentAsync(requestId, new CreatePriorityAssessmentDto
             {
-                HasSafetyHazard = dto.ImmediateHazard,
+                HasSafetyHazard = dto.ImmediateHazard ? true : null,
                 Notes = dto.Notes
-            };
-            assessment = new PriorityAssessment
-            {
-                RequestId = requestId,
-                RiskScore = dto.ImmediateHazard ? 85 : 75,
-                RiskLevel = "Critical",
-                Priority = "Critical",
-                EscalationFlag = true,
-                EscalationReason = dto.Reason,
-                RecommendedResponseWindow = "Immediate (Within 1 hour)",
-                ResponseTimeHours = 1,
-                ResolutionTimeHours = 4,
-                Explanation = $"Manual escalation triggered by {escalatedBy}: {dto.Reason}",
-                AssessedBy = escalatedBy,
-                Status = "Escalated"
-            };
-            await _context.Set<PriorityAssessment>().AddAsync(assessment);
+            }, escalatedBy);
+
+            assessment = await _context.Set<PriorityAssessment>()
+                .Where(p => p.RequestId == requestId && !p.IsDeleted)
+                .OrderByDescending(p => p.CreatedAt)
+                .FirstAsync();
         }
-        else
+
+        var storedFactors = DeserializeFactors(assessment.ContributingFactorsJson);
+        bool hazardRecalculated = false;
+
+        if (dto.ImmediateHazard)
         {
-            assessment.EscalationFlag = true;
-            assessment.EscalationReason = dto.Reason;
-            assessment.Status = "Escalated";
-            assessment.Priority = "Critical";
-            assessment.RecommendedResponseWindow = "Immediate (Within 1 hour)";
-            assessment.ResponseTimeHours = 1;
-            assessment.ResolutionTimeHours = 4;
-            assessment.Explanation += $" | Escalated by {escalatedBy}: {dto.Reason}";
-            assessment.UpdatedAt = DateTime.UtcNow;
+            // A manager-confirmed immediate hazard is a new fact: deterministically
+            // recalculate the risk assessment with the hazard included.
+            string criticality = NormalizeLevel(assessment.AssetCriticality) ?? AssessAssetCriticality(request.Asset?.Criticality, request.Asset?.Category);
+            string likelihood = NormalizeLevel(assessment.LikelihoodLevel) ?? "Medium";
+            int recentFailures = storedFactors.RecentFailureCount;
+            bool isHighDensity = storedFactors.LocationModifier >= 5;
+            const string impact = "Critical"; // AssessImpact rule: active hazard forces Critical impact
+
+            var (hazardScore, hazardFactors) = CalculateRiskScore(criticality, impact, likelihood, true, recentFailures, isHighDensity);
+            var hazardLevel = DetermineRiskLevel(hazardScore);
+
+            assessment.AssetCriticality = criticality;
+            assessment.ImpactLevel = impact;
+            assessment.LikelihoodLevel = likelihood;
+            assessment.RiskScore = hazardScore;
+            assessment.RiskLevel = hazardLevel;
+            assessment.ContributingFactorsJson = JsonSerializer.Serialize(hazardFactors);
+            hazardRecalculated = true;
         }
+
+        // Operational escalation (management decision).
+        // RiskScore/RiskLevel remain the deterministic calculated risk unless a confirmed
+        // hazard forced a genuine recalculation above; Priority/SLA/EscalationFlag express
+        // the operational escalation state.
+        assessment.EscalationFlag = true;
+        assessment.EscalationReason = Truncate(dto.Reason, 500);
+        assessment.Priority = "Critical";
+        assessment.RecommendedResponseWindow = "Immediate (Within 1 hour)";
+        assessment.ResponseTimeHours = 1;
+        assessment.ResolutionTimeHours = 4;
+
+        var slaConfig = await _context.SLAConfigurations
+            .FirstOrDefaultAsync(s => s.PriorityLevel == "Critical" && !s.IsDeleted);
+        if (slaConfig != null)
+        {
+            assessment.ResponseTimeHours = slaConfig.ResponseTimeHours;
+            assessment.ResolutionTimeHours = slaConfig.ResolutionTimeHours;
+        }
+
+        assessment.Explanation = Truncate(hazardRecalculated
+            ? $"Deterministic risk score {assessment.RiskScore}/100 ({assessment.RiskLevel}) recalculated with a manager-confirmed immediate safety hazard. Manual operational escalation to Critical priority by {escalatedBy}: {dto.Reason}"
+            : $"Calculated risk {assessment.RiskScore}/100 ({assessment.RiskLevel}) is unchanged. Manual operational escalation to Critical priority by {escalatedBy}: {dto.Reason}", 2000) ?? string.Empty;
+        assessment.AssessedBy = escalatedBy;
+        assessment.Status = "Escalated";
+        assessment.UpdatedAt = DateTime.UtcNow;
 
         // Write Audit Log
         var audit = new AuditLog
@@ -698,14 +899,139 @@ public class PriorityAssessmentService : IPriorityAssessmentService
             Action = "RequestEscalated",
             EntityName = "MaintenanceRequest",
             EntityId = requestId.ToString(),
-            ChangesJson = JsonSerializer.Serialize(new { Reason = dto.Reason, ImmediateHazard = dto.ImmediateHazard, EscalatedBy = escalatedBy }),
+            ChangesJson = JsonSerializer.Serialize(new
+            {
+                Reason = dto.Reason,
+                ImmediateHazard = dto.ImmediateHazard,
+                EscalatedBy = escalatedBy,
+                HazardRecalculated = hazardRecalculated,
+                RiskScore = assessment.RiskScore,
+                RiskLevel = assessment.RiskLevel,
+                Priority = assessment.Priority
+            }),
             IpAddress = "System/Service"
         };
         await _context.AuditLogs.AddAsync(audit);
 
         await _context.SaveChangesAsync();
 
-        _logger.LogWarning("Request {RequestId} escalated by {EscalatedBy}. Reason: {Reason}", requestId, escalatedBy, dto.Reason);
+        _logger.LogWarning("Request {RequestId} escalated by {EscalatedBy}. Reason: {Reason}. HazardRecalculated: {HazardRecalculated}",
+            requestId, escalatedBy, dto.Reason, hazardRecalculated);
+
+        return MapToDto(assessment, request);
+    }
+
+    public async Task<PriorityAssessmentDto> DeEscalateRequestAsync(Guid requestId, DeEscalateRequestDto dto, string deEscalatedBy)
+    {
+        var request = await _context.MaintenanceRequests
+            .Include(r => r.Asset)
+            .Include(r => r.Location)
+            .Include(r => r.Category)
+            .FirstOrDefaultAsync(r => r.Id == requestId && !r.IsDeleted);
+
+        if (request == null)
+        {
+            throw new NotFoundException($"Maintenance request with ID '{requestId}' was not found.");
+        }
+
+        var assessment = await _context.Set<PriorityAssessment>()
+            .Where(p => p.RequestId == requestId && !p.IsDeleted)
+            .OrderByDescending(p => p.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (assessment == null)
+        {
+            throw new NotFoundException($"Priority assessment for request ID '{requestId}' was not found.");
+        }
+
+        // Safety verification: if the request still contains an active physical hazard, reject de-escalation
+        bool hasActiveHazard = DetectHazard(request.Title, request.Description);
+        if (hasActiveHazard)
+        {
+            throw new InvalidOperationException("Cannot de-escalate: the maintenance request description contains an active physical safety hazard that must first be resolved.");
+        }
+
+        // Recompute the authoritative assessment deterministically from the stored factor
+        // levels (with the manager-confirmed hazard removed). We recompute from stored factors
+        // rather than re-parsing request text so the recalculated risk is reproducible and
+        // every persisted field stays internally consistent (no stale data).
+        var storedFactors = DeserializeFactors(assessment.ContributingFactorsJson);
+
+        string criticality = NormalizeLevel(assessment.AssetCriticality)
+            ?? AssessAssetCriticality(request.Asset?.Criticality, request.Category?.Name);
+        string impact = NormalizeLevel(assessment.ImpactLevel) ?? "Low";
+        string likelihood = NormalizeLevel(assessment.LikelihoodLevel) ?? "Low";
+        int recentFailures = storedFactors.RecentFailureCount;
+        bool isHighDensity = storedFactors.LocationModifier >= 5;
+
+        // De-escalation removes the operational escalation and any manager-confirmed hazard flag,
+        // so the deterministic recalculation runs with hasSafetyHazard = false.
+        // NOTE: argument order is (criticality, impact, likelihood, hasSafetyHazard, recentFailures, isHighDensityLocation).
+        var (score, factors) = CalculateRiskScore(criticality, impact, likelihood, false, recentFailures, isHighDensity);
+        var riskLevel = DetermineRiskLevel(score);
+        var (priority, respHours, resHours, respWindow, computedEscalation) =
+            CalculatePriorityAndSLA(score, riskLevel, false, criticality, impact);
+
+        // Honour SLA configuration overrides when present.
+        var slaConfig = await _context.SLAConfigurations
+            .FirstOrDefaultAsync(s => s.PriorityLevel == priority && !s.IsDeleted);
+        if (slaConfig != null)
+        {
+            respHours = slaConfig.ResponseTimeHours;
+            resHours = slaConfig.ResolutionTimeHours;
+        }
+
+        // Sync ALL assessment fields so no stale escalation state survives.
+        assessment.AssetCriticality = criticality;
+        assessment.ImpactLevel = impact;
+        assessment.LikelihoodLevel = likelihood;
+        assessment.RiskScore = score;
+        assessment.RiskLevel = riskLevel;
+        assessment.Priority = priority;
+        assessment.ResponseTimeHours = respHours;
+        assessment.ResolutionTimeHours = resHours;
+        assessment.RecommendedResponseWindow = respWindow;
+        assessment.ContributingFactorsJson = JsonSerializer.Serialize(factors);
+
+        // EscalationFlag is now the deterministic flag: it stays true only if the recalculated
+        // risk genuinely warrants escalation (e.g. Critical priority), not because of the removed
+        // manual operational escalation.
+        assessment.EscalationFlag = computedEscalation;
+        assessment.EscalationReason = computedEscalation
+            ? "Recalculated Critical risk after de-escalation"
+            : null;
+        assessment.Explanation = Truncate(
+            $"De-escalated by {deEscalatedBy}: {dto.Reason}. Deterministic recalculation (hazard flag removed) produced risk score {score}/100 ({riskLevel}) and priority {priority}.",
+            2000) ?? string.Empty;
+        assessment.AssessedBy = $"{deEscalatedBy} (De-escalated)";
+        assessment.Status = computedEscalation ? "Escalated" : "Active";
+        assessment.UpdatedAt = DateTime.UtcNow;
+
+        var audit = new AuditLog
+        {
+            Action = "RequestDeEscalated",
+            EntityName = "MaintenanceRequest",
+            EntityId = requestId.ToString(),
+            ChangesJson = JsonSerializer.Serialize(new
+            {
+                Reason = dto.Reason,
+                DeEscalatedBy = deEscalatedBy,
+                AssetCriticality = criticality,
+                ImpactLevel = impact,
+                LikelihoodLevel = likelihood,
+                RecalculatedScore = score,
+                RecalculatedRiskLevel = riskLevel,
+                RecalculatedPriority = priority,
+                EscalationFlag = computedEscalation
+            }),
+            IpAddress = "System/Service"
+        };
+        await _context.AuditLogs.AddAsync(audit);
+
+        await _context.SaveChangesAsync();
+
+        _logger.LogInformation("Request {RequestId} de-escalated by {DeEscalatedBy}. Recalculated Priority: {Priority}, Score: {Score}",
+            requestId, deEscalatedBy, priority, score);
 
         return MapToDto(assessment, request);
     }
@@ -717,6 +1043,28 @@ public class PriorityAssessmentService : IPriorityAssessmentService
 
     public async Task<PriorityAssessmentDto> SaveAgentAssessmentAsync(Guid requestId, PriorityAgentResultDto agentResult, string assessedBy)
     {
+        if (agentResult == null)
+        {
+            throw new InvalidOperationException("Agent result cannot be null.");
+        }
+
+        // Authoritative validation of agent result before database persistence
+        if (agentResult.RiskScore < 1 || agentResult.RiskScore > 100)
+        {
+            throw new InvalidOperationException($"Invalid agent RiskScore {agentResult.RiskScore}. Must be between 1 and 100.");
+        }
+
+        string expectedRiskLevel = DetermineRiskLevel(agentResult.RiskScore);
+        if (!string.Equals(expectedRiskLevel, agentResult.RiskLevel, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException($"Inconsistent agent result: RiskScore {agentResult.RiskScore} maps to '{expectedRiskLevel}', but agent reported '{agentResult.RiskLevel}'.");
+        }
+
+        if (string.IsNullOrWhiteSpace(agentResult.Priority))
+        {
+            throw new InvalidOperationException("Agent result Priority cannot be empty.");
+        }
+
         var request = await _context.MaintenanceRequests
             .Include(r => r.Asset)
             .Include(r => r.Location)
@@ -740,17 +1088,20 @@ public class PriorityAssessmentService : IPriorityAssessmentService
             resHours = slaConfig.ResolutionTimeHours;
         }
 
-        var factors = new ContributingFactorsDto
-        {
-            AssetCriticality = agentResult.AssetCriticality,
-            ImpactScore = LevelToPoints(agentResult.ImpactLevel),
-            LikelihoodScore = LevelToPoints(agentResult.LikelihoodLevel),
-            AssetCriticalityScore = LevelToPoints(agentResult.AssetCriticality) * 7,
-            BaseMatrixScore = LevelToPoints(agentResult.ImpactLevel) * LevelToPoints(agentResult.LikelihoodLevel) * 4,
-            HasSafetyHazard = agentResult.HazardFlag ?? false,
-            SafetyHazardModifier = (agentResult.HazardFlag == true) ? 25 : 0,
-            OperationalDisruption = agentResult.ImpactLevel
-        };
+        // Rebuild the complete, authoritative contributing-factor set from the agent's
+        // reported levels. The score was already cross-verified against CalculateRiskScore
+        // in PriorityAgentService, so recomputing the factors here is consistent and complete
+        // (includes recurrence/location modifiers and recent-failure count).
+        bool agentHazard = agentResult.ContributingFactors?.HasSafetyHazard ?? (agentResult.HazardFlag ?? false);
+        bool agentHighDensity = (agentResult.ContributingFactors?.LocationModifier ?? 0) >= 5;
+        int agentRecentFailures = agentResult.ContributingFactors?.RecentFailureCount ?? 0;
+        var (_, factors) = CalculateRiskScore(
+            agentResult.AssetCriticality,
+            agentResult.ImpactLevel,
+            agentResult.LikelihoodLevel,
+            agentHazard,
+            agentRecentFailures,
+            agentHighDensity);
 
         var existing = await _context.Set<PriorityAssessment>()
             .Where(p => p.RequestId == requestId && !p.IsDeleted)
@@ -862,6 +1213,8 @@ public class PriorityAssessmentService : IPriorityAssessmentService
             ContributingFactors = factorsDto,
             AssessedBy = p.AssessedBy,
             Status = p.Status,
+            HazardDetected = factorsDto.HasSafetyHazard,
+            HumanApprovalRequired = p.Priority == "Critical" || factorsDto.HasSafetyHazard,
             CreatedAt = p.CreatedAt,
             UpdatedAt = p.UpdatedAt
         };
@@ -885,6 +1238,32 @@ public class PriorityAssessmentService : IPriorityAssessmentService
             "Medium" => 2,
             _ => 1
         };
+    }
+
+    /// <summary>
+    /// Safely deserializes a stored ContributingFactorsJson blob. Never throws: falls back
+    /// to an empty factor set so escalation/de-escalation can recompute from authoritative rules.
+    /// </summary>
+    private static ContributingFactorsDto DeserializeFactors(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new ContributingFactorsDto();
+        try
+        {
+            return JsonSerializer.Deserialize<ContributingFactorsDto>(json) ?? new ContributingFactorsDto();
+        }
+        catch
+        {
+            return new ContributingFactorsDto();
+        }
+    }
+
+    /// <summary>
+    /// Truncates free-text fields to a safe maximum length before persistence.
+    /// </summary>
+    private static string? Truncate(string? value, int maxLength)
+    {
+        if (string.IsNullOrEmpty(value)) return value;
+        return value.Length <= maxLength ? value : value.Substring(0, maxLength);
     }
 
     #endregion

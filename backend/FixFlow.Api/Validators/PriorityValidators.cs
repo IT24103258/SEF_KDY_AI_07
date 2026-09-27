@@ -20,6 +20,10 @@ public class CreatePriorityAssessmentDtoValidator : AbstractValidator<CreatePrio
         RuleFor(x => x.LikelihoodOverride)
             .Must(x => string.IsNullOrEmpty(x) || ValidLevels.Contains(x))
             .WithMessage("LikelihoodOverride must be one of: Low, Medium, High, Critical.");
+
+        RuleFor(x => x.RecentFailureCount)
+            .GreaterThanOrEqualTo(0).When(x => x.RecentFailureCount.HasValue)
+            .WithMessage("RecentFailureCount cannot be negative.");
     }
 }
 
@@ -36,6 +40,12 @@ public class UpdatePriorityAssessmentDtoValidator : AbstractValidator<UpdatePrio
         RuleFor(x => x.RiskLevel)
             .Must(x => string.IsNullOrEmpty(x) || ValidLevels.Contains(x))
             .WithMessage("RiskLevel must be one of: Low, Medium, High, Critical.");
+
+        RuleFor(x => x)
+            .Must(x => string.IsNullOrEmpty(x.Priority) || string.IsNullOrEmpty(x.RiskLevel) ||
+                       !((x.Priority == "Low" && (x.RiskLevel == "Critical" || x.RiskLevel == "High")) ||
+                         ((x.Priority == "Critical" || x.Priority == "High") && x.RiskLevel == "Low")))
+            .WithMessage("Contradictory Priority and RiskLevel override: Priority and RiskLevel cannot have contradictory levels.");
     }
 }
 
@@ -46,6 +56,16 @@ public class EscalateRequestDtoValidator : AbstractValidator<EscalateRequestDto>
         RuleFor(x => x.Reason)
             .NotEmpty().WithMessage("Escalation reason is required.")
             .MaximumLength(500).WithMessage("Escalation reason cannot exceed 500 characters.");
+    }
+}
+
+public class DeEscalateRequestDtoValidator : AbstractValidator<DeEscalateRequestDto>
+{
+    public DeEscalateRequestDtoValidator()
+    {
+        RuleFor(x => x.Reason)
+            .NotEmpty().WithMessage("De-escalation reason is required.")
+            .MaximumLength(500).WithMessage("De-escalation reason cannot exceed 500 characters.");
     }
 }
 
