@@ -1,13 +1,9 @@
 import uuid
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, HTTPException
 from schemas.workflow_schemas import WorkflowExecutionRequest, WorkflowExecutionResult, StepExecutionResult
 from agents.agent_skeletons import ClassificationAgent, PriorityAgent, AssignmentAgent, SchedulingAgent
 
-app = FastAPI(
-    title="FixFlow AI Agentic Orchestrator",
-    description="Internal Multi-Agent Execution Pipeline",
-    version="1.0.0"
-)
+router = APIRouter()
 
 '''
 ================================================================================
@@ -19,7 +15,7 @@ Do NOT create separate orchestrator files.
 ================================================================================
 '''
 
-@app.get("/health")
+@router.get("/health")
 def health_check():
     return {"status": "healthy", "service": "FixFlow Agentic AI Orchestrator"}
 
@@ -44,7 +40,7 @@ _OBJECTIVES = {
     "Scheduling": "Propose a conflict-free schedule for the assigned technician and work order.",
 }
 
-@app.post("/api/orchestrator/execute", response_model=WorkflowExecutionResult)
+@router.post("/api/orchestrator/execute", response_model=WorkflowExecutionResult)
 def execute_workflow(request: WorkflowExecutionRequest):
     workflow_id = str(uuid.uuid4())
     steps = []
