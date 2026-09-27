@@ -24,15 +24,18 @@ export const SubmitRequestPage = () => {
   // ── Remote data for dropdowns ─────────────────────────────────────────────
   //removed category state since it's now AI-determined
   const [locations,  setLocations]  = useState([]);
+  const [assets,     setAssets]     = useState([]);
   const [dropLoading, setDropLoading] = useState(true);
   const [dropError,   setDropError]   = useState('');
 
   useEffect(() => {
     Promise.all([
-      api.get('/locations')
+      api.get('/locations'),
+      api.get('/assets')
     ])
-      .then(([locRes]) => {
-        if (locRes?.success)  setLocations(locRes.data   || []);
+      .then(([locRes, assetRes]) => {
+        if (locRes?.success)   setLocations(locRes.data   || []);
+        if (assetRes?.success) setAssets(assetRes.data    || []);
       })
       .catch(() => setDropError('Failed to load form options. Please refresh.'))
       .finally(() => setDropLoading(false));
@@ -236,6 +239,23 @@ export const SubmitRequestPage = () => {
             {errors.locationId && (
               <span className="ff-error-text" style={{ marginTop: '0.25rem', display: 'block' }}>{errors.locationId}</span>
             )}
+          </div>
+
+          {/* What's affected (optional) */}
+          <div className="ff-field" style={{ marginTop: '1rem' }}>
+            <label className="ff-label">What is affected? <span style={{ color: 'var(--text-secondary)', fontWeight: 400 }}>(optional)</span></label>
+            <select
+              name="assetId"
+              value={form.assetId}
+              onChange={handleChange}
+              disabled={submitting || success}
+              className="ff-input"
+            >
+              <option value="">— Not sure / general area —</option>
+              {assets.map(a => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
           </div>
 
           {/* API error */}
