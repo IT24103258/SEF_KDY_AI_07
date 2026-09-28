@@ -2,9 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { PageHeader, Card, StatusBadge, LoadingState } from '../components/SharedUI';
 import { api } from '../services/api';
 
-<<<<<<< HEAD
 export { TechnicianHome } from './TechnicianHome';
-=======
 // ── MEMBER 1 — Request Intake & Classification page re-exports ────────────────
 export { SubmitRequestPage }  from './requests/SubmitRequestPage';
 export { MyRequestsPage }     from './requests/MyRequestsPage';
@@ -12,7 +10,6 @@ export { RequestQueuePage }   from './requests/RequestQueuePage';
 export { RequestDetailPage }  from './requests/RequestDetailPage';
 // ─────────────────────────────────────────────────────────────────────────────
 
->>>>>>> main
 
 export const Dashboard = () => {
   const [summary, setSummary] = useState(null);
