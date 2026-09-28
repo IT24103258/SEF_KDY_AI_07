@@ -75,15 +75,12 @@ const navItems = [
     roles: ADMIN_ROLES
   },
   {
-<<<<<<< HEAD
     label: 'Technician Matching',
     path: '/assignments',
     icon: UserCheck,
-=======
     label: 'Request Queue',
     path: '/request-queue',
     icon: ClipboardList,
->>>>>>> main
     roles: ADMIN_ROLES
   },
   {
