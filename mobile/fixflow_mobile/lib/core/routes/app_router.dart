@@ -4,6 +4,7 @@ import '../../screens/login_screen.dart';
 import '../../screens/home_screen.dart';
 import '../../screens/profile_screen.dart';
 import '../../screens/notifications_screen.dart';
+import '../../screens/technician_jobs_screen.dart';
 
 // ── MEMBER 1 ─────────────────────────────────────────────────────────────────
 import '../../screens/requests/submit_request_screen.dart';
@@ -55,7 +56,7 @@ class AppRouter {
   // ============================================================
   // MEMBER 3 ROUTE CONSTANTS — TECHNICIAN MATCHING & ASSIGNMENT
   // ============================================================
-  // Example: static const String technicianJobList = '/technician-jobs';
+  static const String technicianHome = '/technician-home';
 
 
   // ============================================================
@@ -119,8 +120,8 @@ class AppRouter {
       // ============================================================
       // MEMBER 3 ROUTE CASES — TECHNICIAN MATCHING & ASSIGNMENT
       // ============================================================
-      // case technicianJobList:
-      //   return MaterialPageRoute(builder: (_) => const TechnicianJobListScreen());
+      case technicianHome:
+        return MaterialPageRoute(builder: (_) => const TechnicianJobsScreen());
 
 
       // ============================================================

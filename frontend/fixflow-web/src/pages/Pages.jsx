@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { PageHeader, Card, StatusBadge, LoadingState } from '../components/SharedUI';
 import { api } from '../services/api';
 
+export { TechnicianHome } from './TechnicianHome';
 // ── MEMBER 1 — Request Intake & Classification page re-exports ────────────────
 export { SubmitRequestPage }  from './requests/SubmitRequestPage';
 export { MyRequestsPage }     from './requests/MyRequestsPage';
@@ -396,23 +397,6 @@ export const Reports = () => (
     <Card title="Operational Summary">
       <p style={{ color: 'var(--text-secondary)' }}>
         Detailed metrics will populate as maintenance workflows execute.
-      </p>
-    </Card>
-  </div>
-);
-
-/* Technician landing page */
-export const TechnicianHome = () => (
-  <div>
-    <PageHeader
-      title="Technician Home"
-      description="Technician workspace for managing assigned maintenance requests"
-    />
-
-    <Card title="Welcome, Technician">
-      <p style={{ color: 'var(--text-secondary)' }}>
-        Your assigned maintenance requests, work orders, and task updates
-        will appear here.
       </p>
     </Card>
   </div>

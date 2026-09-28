@@ -29,6 +29,7 @@ import {
   RequestDetailPage
 } from '../pages/Pages';
 
+import TechnicianAssignment from '../pages/TechnicianAssignment';
 
 import { getHomePath } from '../utils/roleRoutes';
 import { PriorityDashboard } from '../pages/PriorityDashboard';
@@ -292,6 +293,15 @@ export const AppRoutes = () => {
             roles={['Technician']}
           >
             <TechnicianHome />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/assignments"
+        element={
+          <ProtectedRoute>
+            <TechnicianAssignment />
           </ProtectedRoute>
         }
       />
