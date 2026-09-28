@@ -16,7 +16,6 @@ import re
 from pydantic import BaseModel, ValidationError
 from typing import Type, Tuple, Dict, Any, Optional, List
 
-
 class DeterministicValidator:
     VALID_RISK_LEVELS     = {"Low", "Medium", "High", "Critical"}
     VALID_PRIORITY_LEVELS = {"Low", "Medium", "High", "Critical"}
@@ -285,3 +284,4 @@ class DeterministicValidator:
                 )
 
         return False, ""
+

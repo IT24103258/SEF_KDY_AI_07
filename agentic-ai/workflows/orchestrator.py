@@ -1,14 +1,22 @@
 import uuid
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+import typing
 from fastapi import APIRouter, HTTPException
-from schemas.workflow_schemas import WorkflowExecutionRequest, WorkflowExecutionResult, StepExecutionResult
-from agents.agent_skeletons import ClassificationAgent, PriorityAgent, AssignmentAgent, SchedulingAgent
+from pydantic import BaseModel
+from schemas.workflow_schemas import (
+    WorkflowExecutionRequest,
+    WorkflowExecutionResult,
+    StepExecutionResult,
+)
+from agents.agent_skeletons import (
+    ClassificationAgent,
+    PriorityAgent,
+    AssignmentAgent,
+    SchedulingAgent,
+)
 
 router = APIRouter()
 
-'''
+"""
 ================================================================================
 FIXFLOW SHARED FOUNDATION MULTI-AGENT ORCHESTRATOR
 ================================================================================
@@ -16,29 +24,21 @@ IMPORTANT FOR ALL 4 MEMBERS:
 Register your step execution in your designated section inside execute_workflow().
 Do NOT create separate orchestrator files.
 ================================================================================
-'''
-# ============================================================
-# CORS MIDDLEWARE CONFIGURATION
-# ============================================================
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+"""
 
 # ============================================================
 # PYDANTIC SCHEMAS FOR DIRECT & STANDALONE REQUESTS
 # ============================================================
 class DirectAssignRequest(BaseModel):
-    requestId: int | str
-    technicianId: int | str
+    requestId: typing.Union[int, str]
+    technicianId: typing.Union[int, str]
+
 
 class StandaloneAssignmentRequest(BaseModel):
-    request_id: int | str = "REQ-101"
+    request_id: typing.Union[int, str] = "REQ-101"
     required_skill: str = "Electrical"
     priority: str = "High"
+
 
 # ============================================================
 # ROUTE HANDLERS & ENDPOINTS
@@ -48,38 +48,38 @@ class StandaloneAssignmentRequest(BaseModel):
 def health_check():
     return {"status": "healthy", "service": "FixFlow Agentic AI Orchestrator"}
 
-@app.post("/agent/assign")
+
+@router.post("/agent/assign")
 def direct_assign(request: DirectAssignRequest):
     return {
         "status": "SUCCESS",
         "message": f"Technician {request.technicianId} assigned to request {request.requestId} via AI Orchestrator",
         "request_id": request.requestId,
-        "technician_id": request.technicianId
+        "technician_id": request.technicianId,
     }
+
 
 # ============================================================
 # MEMBER 3 — DEDICATED STANDALONE TEST ENDPOINT
 # ============================================================
-@app.post("/api/agent/assignment/test")
+@router.post("/api/agent/assignment/test")
 def test_assignment_agent_only(request: StandaloneAssignmentRequest):
-
     assignment_agent = AssignmentAgent()
-    
-    step3_result = assignment_agent.run_step({
-        "request_id": request.request_id,
-        "required_skill": request.required_skill,
-        "priority": request.priority
-    })
-    
-    return {
-        "status": "SUCCESS",
-        "result": step3_result
-    }
+
+    step3_result = assignment_agent.run_step(
+        {
+            "request_id": request.request_id,
+            "required_skill": request.required_skill,
+            "priority": request.priority,
+        }
+    )
+
+    return {"status": "SUCCESS", "result": step3_result}
+
 
 # ============================================================
 # MAIN MULTI-AGENT WORKFLOW ORCHESTRATOR
 # ============================================================
-@app.post("/api/orchestrator/execute", response_model=WorkflowExecutionResult)
 
 # ---------------------------------------------------------------------------
 # Shared, auditable planning metadata. The orchestrator always executes the
@@ -88,9 +88,8 @@ def test_assignment_agent_only(request: StandaloneAssignmentRequest):
 # ---------------------------------------------------------------------------
 _PLAN = [
     "1. ClassificationAgent — intake & classify the raw request facts.",
-    "2. PriorityAgent — deterministically assess risk & priority (Component 2).",
-    "3. AssignmentAgent — match technician skills to the classified request.",
-    "4. SchedulingAgent — propose a conflict-free work-order schedule.",
+    "2. PriorityAgent — assess risk & SLA urgency.",
+    "3. SchedulingAgent — assign technician & slot.",
 ]
 
 _OBJECTIVES = {
@@ -101,6 +100,7 @@ _OBJECTIVES = {
     "Scheduling": "Propose a conflict-free schedule for the assigned technician and work order.",
 }
 
+
 @router.post("/api/orchestrator/execute", response_model=WorkflowExecutionResult)
 def execute_workflow(request: WorkflowExecutionRequest):
     workflow_id = str(uuid.uuid4())
@@ -108,6 +108,28 @@ def execute_workflow(request: WorkflowExecutionRequest):
     requires_approval = False
     approval_reason = None
 
+    # Step 1: Classification Agent
+    classification_agent = ClassificationAgent()
+    step1_res = classification_agent.run_step({"request": request})
+    steps.append(step1_res)
+
+    # Step 2: Priority Agent
+    priority_agent = PriorityAgent()
+    step2_res = priority_agent.run_step({"request": request, "classification": step1_res})
+    steps.append(step2_res)
+
+    # Step 3: Assignment & Scheduling Agent
+    scheduling_agent = SchedulingAgent()
+    step3_res = scheduling_agent.run_step({"request": request, "priority": step2_res})
+    steps.append(step3_res)
+
+    return WorkflowExecutionResult(
+        workflow_id=workflow_id,
+        status="COMPLETED",
+        steps=steps,
+        requires_approval=requires_approval,
+        approval_reason=approval_reason,
+    )
     # ============================================================
     # SHARED — Objective & structured plan (auditable).
     # Additive metadata: every workflow declares its objective and the

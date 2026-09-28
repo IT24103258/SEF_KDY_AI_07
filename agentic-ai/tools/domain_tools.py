@@ -1,3 +1,6 @@
+from datetime import timedelta
+from tools.base_tool import BaseTool
+from typing import Dict, Any, Optional, List, Tuple
 """
 Component 2 — Domain Tools for Risk & Priority Assessment.
 
@@ -348,6 +351,262 @@ class SavePriorityAssessmentTool(BaseTool):
         }
 
 
+
+
+# ============================================================
+# COMPONENT 4 — SCHEDULING & WORK ORDER MANAGEMENT TOOLS
+# ============================================================
+
+class GetTechnicianCalendarTool(BaseTool):
+    def __init__(self):
+        super().__init__("GetTechnicianCalendar", "Inspects technician working calendar, shift windows, and active assignments")
+
+    def _run(self, technician_id: str = "TECH-001", technician_calendar: Optional[Dict[str, Any]] = None, is_available: Optional[bool] = None, **kwargs) -> Dict[str, Any]:
+        """
+        Processes technician availability and shift windows based on supplied domain context.
+        """
+        cal = technician_calendar or {}
+        available = is_available if is_available is not None else cal.get("is_available", True)
+        shift_start = cal.get("shift_start", "08:00:00")
+        shift_end = cal.get("shift_end", "17:00:00")
+        working_days = cal.get("working_days", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"])
+
+        return {
+            "technician_id": technician_id,
+            "is_available": available,
+            "shift_start": shift_start,
+            "shift_end": shift_end,
+            "working_days": working_days,
+            "availability_status": "Available" if available else "Unavailable"
+        }
+
+class GetBusinessHoursTool(BaseTool):
+    def __init__(self):
+        super().__init__("GetBusinessHours", "Inspects organization operational opening and closing hours by day")
+
+    def _run(self, business_hours: Optional[Dict[str, Any]] = None, date: str = "", **kwargs) -> Dict[str, Any]:
+        """
+        Retrieves operational business hours policy for scheduling window evaluation.
+        """
+        bh = business_hours or {}
+        working_days = bh.get("working_days", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"])
+        weekday_open = bh.get("weekday_open", "08:00:00")
+        weekday_close = bh.get("weekday_close", "17:00:00")
+        saturday_close = bh.get("saturday_close", "13:00:00")
+        is_working_day = bh.get("is_working_day", True)
+
+        return {
+            "working_days": working_days,
+            "weekday_open": weekday_open,
+            "weekday_close": weekday_close,
+            "saturday_close": saturday_close,
+            "is_working_day": is_working_day,
+            "timezone": "UTC+05:30"
+        }
+
+class GetExistingWorkOrdersTool(BaseTool):
+    def __init__(self):
+        super().__init__("GetExistingWorkOrders", "Inspects active scheduled work orders for a technician to detect conflicts")
+
+    def _run(self, technician_id: str = "TECH-001", existing_bookings: Optional[List[Dict[str, Any]]] = None, date: str = "", **kwargs) -> Dict[str, Any]:
+        """
+        Processes supplied bookings for the technician to evaluate potential overlaps.
+        """
+        bookings = existing_bookings if existing_bookings is not None else []
+        # Filter by technician_id if bookings specify a technician
+        filtered = [
+            b for b in bookings
+            if not b.get("technician_id") or b.get("technician_id") == technician_id
+        ]
+        return {
+            "technician_id": technician_id,
+            "existing_bookings": filtered,
+            "booking_count": len(filtered)
+        }
+
+class CreateScheduleProposalTool(BaseTool):
+    def __init__(self):
+        super().__init__("CreateScheduleProposal", "Produces a structured conflict-free work-order scheduling proposal")
+
+    def _run(
+        self,
+        request_id: str = "REQ-001",
+        technician_id: str = "TECH-001",
+        proposed_start: str = "",
+        proposed_end: str = "",
+        estimated_duration_minutes: int = 60,
+        priority: str = "Medium",
+        sla_deadline: Optional[str] = None,
+        conflict_detected: bool = False,
+        conflict_details: Optional[List[str]] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Assembles structured schedule proposal output schema.
+        """
+        details = conflict_details or []
+        return {
+            "request_id": request_id,
+            "technician_id": technician_id,
+            "assigned_technician_id": technician_id,
+            "proposed_start": proposed_start,
+            "proposed_end": proposed_end,
+            "proposed_start_time": proposed_start,
+            "proposed_end_time": proposed_end,
+            "estimated_duration_minutes": estimated_duration_minutes,
+            "priority": priority,
+            "sla_deadline": sla_deadline,
+            "conflict_detected": conflict_detected,
+            "conflict_details": details,
+            "proposal_status": "Proposed",
+            "is_conflict_free": not conflict_detected
+        }
+
+class ValidateScheduleTool(BaseTool):
+    def __init__(self):
+        super().__init__("ValidateSchedule", "Validates a schedule proposal deterministically against business hours, technician availability, existing bookings, and SLA")
+
+    def _run(
+        self,
+        technician_id: str = "TECH-001",
+        start_time: str = "",
+        end_time: str = "",
+        duration_minutes: int = 60,
+        existing_bookings: Optional[List[Dict[str, Any]]] = None,
+        business_hours: Optional[Dict[str, Any]] = None,
+        is_technician_available: bool = True,
+        priority: str = "Medium",
+        sla_deadline: Optional[str] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        from scheduling.slot_planner import parse_iso_to_aware, DAY_NAMES, IST
+
+        conflicts = []
+        validation_messages = []
+        is_valid = True
+        conflict_free = True
+        within_bh = True
+        sla_compliant = True
+
+        if not start_time or not end_time:
+            is_valid = False
+            validation_messages.append("Start time and end time are required.")
+            return {
+                "technician_id": technician_id,
+                "is_valid": is_valid,
+                "conflict_free": conflict_free,
+                "within_business_hours": within_bh,
+                "within_technician_availability": is_technician_available,
+                "sla_compliant": sla_compliant,
+                "conflicts": conflicts,
+                "validation_messages": validation_messages,
+            }
+
+        if duration_minutes <= 0:
+            is_valid = False
+            validation_messages.append("Duration must be a positive number of minutes.")
+
+        if not is_technician_available:
+            is_valid = False
+            validation_messages.append("Technician is unavailable.")
+
+        dt_start = parse_iso_to_aware(start_time)
+        dt_end = parse_iso_to_aware(end_time)
+
+        if dt_start and dt_end and dt_start >= dt_end:
+            is_valid = False
+            validation_messages.append("Start time must be earlier than end time.")
+        elif not dt_start or not dt_end:
+            if start_time >= end_time:
+                is_valid = False
+                validation_messages.append("Start time must be earlier than end time.")
+
+        if dt_start and dt_end and duration_minutes > 0:
+            expected_end = dt_start + timedelta(minutes=duration_minutes)
+            actual_diff = abs((dt_end - expected_end).total_seconds())
+            if actual_diff > 60:
+                validation_messages.append(
+                    f"Duration inconsistency: proposed span is {int((dt_end - dt_start).total_seconds() // 60)} min "
+                    f"but duration_minutes is {duration_minutes}."
+                )
+
+        if dt_start and business_hours:
+            bh = business_hours or {}
+            working_days = bh.get("working_days", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"])
+            day_name = DAY_NAMES[dt_start.weekday()]
+
+            if day_name in working_days:
+                weekday_open = bh.get("weekday_open", "08:00:00")
+                if day_name == "Saturday":
+                    weekday_close = bh.get("saturday_close", "13:00:00")
+                else:
+                    weekday_close = bh.get("weekday_close", "17:00:00")
+
+                open_parts = weekday_open.split(":")
+                close_parts = weekday_close.split(":")
+                biz_open = dt_start.replace(hour=int(open_parts[0]), minute=int(open_parts[1]) if len(open_parts) > 1 else 0, second=0, microsecond=0)
+                biz_close = dt_start.replace(hour=int(close_parts[0]), minute=int(close_parts[1]) if len(close_parts) > 1 else 0, second=0, microsecond=0)
+
+                if dt_start < biz_open or dt_end > biz_close:
+                    within_bh = False
+            else:
+                within_bh = False
+
+        bookings = existing_bookings or []
+        for b in bookings:
+            b_start = b.get("start_time") or b.get("start")
+            b_end = b.get("end_time") or b.get("end")
+            if b_start and b_end:
+                b_dt_start = parse_iso_to_aware(b_start) if isinstance(b_start, str) else b_start
+                b_dt_end = parse_iso_to_aware(b_end) if isinstance(b_end, str) else b_end
+
+                has_overlap = False
+                if b_dt_start and b_dt_end and dt_start and dt_end:
+                    has_overlap = b_dt_start < dt_end and b_dt_end > dt_start
+                elif b_start and b_end:
+                    has_overlap = b_start < end_time and b_end > start_time
+
+                if has_overlap:
+                    conflict_free = False
+                    is_valid = False
+                    wo_id = b.get("work_order_id")
+                    wo_title = b.get("title")
+                    if wo_id and wo_title:
+                        desc = f"{wo_id} ({wo_title})"
+                    else:
+                        desc = wo_id or wo_title or "Existing Booking"
+                    conflicts.append(f"Overlap with {desc} ({b_start} - {b_end})")
+                    validation_messages.append(f"Schedule conflict with {desc} ({b_start} - {b_end}).")
+
+        if sla_deadline:
+            dt_sla = parse_iso_to_aware(sla_deadline)
+            if dt_sla and dt_end:
+                if dt_end > dt_sla:
+                    sla_compliant = False
+                    is_valid = False
+                    validation_messages.append(f"Proposed completion time ({end_time}) breaches SLA deadline ({sla_deadline}).")
+            elif end_time and end_time > sla_deadline:
+                sla_compliant = False
+                is_valid = False
+                validation_messages.append(f"Proposed completion time ({end_time}) breaches SLA deadline ({sla_deadline}).")
+
+        if is_valid and not validation_messages:
+            validation_messages.append("All schedule constraints passed deterministic validation.")
+
+        return {
+            "technician_id": technician_id,
+            "is_valid": is_valid,
+            "conflict_free": conflict_free,
+            "within_business_hours": within_bh,
+            "within_technician_availability": is_technician_available,
+            "sla_compliant": sla_compliant,
+            "conflicts": conflicts,
+            "validation_messages": validation_messages,
+        }
+
+
+# Tool Registry for Allow-Listing
+
 # ---------------------------------------------------------------------------
 # Tool Registry / Allow-List
 # ---------------------------------------------------------------------------
@@ -375,4 +634,16 @@ ALLOW_LISTED_TOOLS = {
     "SaveRiskAssessment": SaveRiskAssessmentTool(),
     "save_priority_assessment": SavePriorityAssessmentTool(),
     "SavePriorityAssessment": SavePriorityAssessmentTool(),
+    
+    # Component 4: Scheduling & Work Order Management Allow-Listed Tools
+    "get_technician_calendar": GetTechnicianCalendarTool(),
+    "GetTechnicianCalendar": GetTechnicianCalendarTool(),
+    "get_business_hours": GetBusinessHoursTool(),
+    "GetBusinessHours": GetBusinessHoursTool(),
+    "get_existing_work_orders": GetExistingWorkOrdersTool(),
+    "GetExistingWorkOrders": GetExistingWorkOrdersTool(),
+    "create_schedule_proposal": CreateScheduleProposalTool(),
+    "CreateScheduleProposal": CreateScheduleProposalTool(),
+    "validate_schedule": ValidateScheduleTool(),
+    "ValidateSchedule": ValidateScheduleTool()
 }

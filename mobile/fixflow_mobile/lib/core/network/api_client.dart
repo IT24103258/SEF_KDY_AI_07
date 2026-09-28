@@ -68,6 +68,5 @@ class ApiClient {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return data;
     }
-    throw AppException(data['message'] ?? 'An error occurred', response.statusCode);
   }
 }

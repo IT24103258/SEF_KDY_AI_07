@@ -74,15 +74,19 @@ const navItems = [
     icon: BarChart3,
     roles: ADMIN_ROLES
   },
-  {
-    label: 'Technician Matching',
-    path: '/assignments',
-    icon: UserCheck,
-    label: 'Request Queue',
-    path: '/request-queue',
-    icon: ClipboardList,
-    roles: ADMIN_ROLES
-  },
+  // ✅ FIXED: Separated into two distinct menu items
+{
+  label: 'Technician Matching',
+  path: '/assignments',
+  icon: UserCheck,
+  roles: ADMIN_ROLES
+},
+{
+  label: 'Request Queue',
+  path: '/request-queue',
+  icon: ClipboardList,
+  roles: ADMIN_ROLES
+},
   {
     label: 'My Work Orders',
     path: '/technician',

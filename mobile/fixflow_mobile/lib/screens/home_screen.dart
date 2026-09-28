@@ -32,6 +32,7 @@ class HomeScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── Welcome card (unchanged) ──────────────────────────────────
             Card(
               child: ListTile(
                 leading: const CircleAvatar(
@@ -62,6 +63,8 @@ class HomeScreen extends StatelessWidget {
             ),
 
             const SizedBox(height: 24),
+
+            // ── Gateway info card (unchanged) ─────────────────────────────
             const Text(
               'Quick Actions',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -100,6 +103,69 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
               ),
+            ),
+
+            // ──────────────────────────────────────────────────────────────
+            // COMPONENT 4 — TECHNICIAN WORKSPACE NAVIGATION
+            // Only visible when the authenticated user's role is 'Technician'.
+            // All routes are already registered in AppRouter (no new routes).
+            // All target screens already exist (no new screens created).
+            // Manager and Requester are completely unaffected.
+            // ──────────────────────────────────────────────────────────────
+            if (authProvider.user?.role == 'Technician') ...[
+              const SizedBox(height: 24),
+              const Text(
+                'My Technician Workspace',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 12),
+              Card(
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                child: Column(
+                  children: [
+                    _TechNavTile(
+                      icon: Icons.calendar_today,
+                      label: 'My Schedule / Calendar',
+                      subtitle: 'View daily scheduled jobs',
+                      color: const Color(0xFF2563EB),
+                      onTap: () => Navigator.pushNamed(
+                        context,
+                        AppRouter.technicianSchedule,
+                      ),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    _TechNavTile(
+                      icon: Icons.assignment,
+                      label: 'All Assigned Work Orders',
+                      subtitle: 'Browse and filter all jobs',
+                      color: Colors.orange,
+                      onTap: () => Navigator.pushNamed(
+                        context,
+                        AppRouter.allJobs,
+                      ),
+                    ),
+                    const Divider(height: 1, indent: 56),
+                    _TechNavTile(
+                      icon: Icons.notifications_outlined,
+                      label: 'Notifications',
+                      subtitle: 'View recent alerts',
+                      color: Colors.teal,
+                      onTap: () => Navigator.pushNamed(
+                        context,
+                        AppRouter.notifications,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Text(
+                  'Tap a job in Schedule or Work Orders to open job details, '
+                  'start work, add field notes, and capture completion sign-off.',
+                  style: TextStyle(fontSize: 11, color: Colors.grey[600]),
+                ),
             ] else ...[
               // Staff roles (Manager/Administrator/Technician) land here for now.
               // Other members: add your own quick actions in this block.
@@ -116,6 +182,45 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
+// ────────────────────────────────────────────────────────────────────────────
+// Private helper widget — only used inside HomeScreen.
+// A single navigation tile for the Technician workspace card.
+// ────────────────────────────────────────────────────────────────────────────
+class _TechNavTile extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String subtitle;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _TechNavTile({
+    required this.icon,
+    required this.label,
+    required this.subtitle,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListTile(
+      leading: CircleAvatar(
+        backgroundColor: color.withOpacity(0.12),
+        child: Icon(icon, color: color, size: 22),
+      ),
+      title: Text(
+        label,
+        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+      ),
+      trailing: const Icon(Icons.chevron_right, size: 20),
+      onTap: onTap,
+    );
+  }
+}
 class _QuickAction extends StatelessWidget {
   final IconData icon;
   final String label;
