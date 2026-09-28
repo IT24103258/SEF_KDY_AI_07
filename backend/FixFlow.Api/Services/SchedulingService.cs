@@ -11,6 +11,8 @@ namespace FixFlow.Api.Services;
 
 public class SchedulingService : ISchedulingService
 {
+    private static readonly TimeZoneInfo FacilityTimeZone = TimeZoneInfo.FindSystemTimeZoneById("Asia/Colombo");
+
     private readonly FixFlowDbContext _context;
     private readonly IAuditLogService _auditLogService;
     private readonly INotificationService _notificationService;
@@ -23,6 +25,22 @@ public class SchedulingService : ISchedulingService
         _context = context;
         _auditLogService = auditLogService;
         _notificationService = notificationService;
+    }
+
+    internal static DateTime NormalizeToUtc(DateTime value)
+    {
+        if (value.Kind == DateTimeKind.Utc)
+            return value;
+        if (value.Kind == DateTimeKind.Unspecified)
+            return TimeZoneInfo.ConvertTimeToUtc(value, FacilityTimeZone);
+        return value.ToUniversalTime();
+    }
+
+    internal static DateTime ConvertToLocal(DateTime utcValue)
+    {
+        if (utcValue.Kind != DateTimeKind.Utc)
+            utcValue = utcValue.ToUniversalTime();
+        return TimeZoneInfo.ConvertTimeFromUtc(utcValue, FacilityTimeZone);
     }
 
     public async Task<List<BusinessHoursDto>> GetBusinessHoursAsync()
@@ -61,7 +79,14 @@ public class SchedulingService : ISchedulingService
             IsSlaCompliant = true
         };
 
-        if (startTime >= endTime)
+        var startTimeUtc = NormalizeToUtc(startTime);
+        var endTimeUtc = NormalizeToUtc(endTime);
+        var slaDeadlineUtc = slaDeadline.HasValue ? NormalizeToUtc(slaDeadline.Value) : (DateTime?)null;
+
+        var startTimeLocal = ConvertToLocal(startTimeUtc);
+        var endTimeLocal = ConvertToLocal(endTimeUtc);
+
+        if (startTimeUtc >= endTimeUtc)
         {
             result.IsValid = false;
             result.ValidationErrors.Add("Start time must be earlier than end time.");
@@ -91,31 +116,31 @@ public class SchedulingService : ISchedulingService
             result.ValidationErrors.Add($"Technician {tech.User.FirstName} {tech.User.LastName} is currently marked as unavailable.");
         }
 
-        // 2. Business Hours Validation
+        // 2. Business Hours Validation (uses facility-local wall-clock time)
         await EnsureDefaultBusinessHoursAsync();
-        var dayOfWeek = (int)startTime.DayOfWeek;
+        var dayOfWeek = (int)startTimeLocal.DayOfWeek;
         var businessHours = await _context.Set<BusinessHours>().FirstOrDefaultAsync(b => b.DayOfWeek == dayOfWeek);
 
         if (businessHours == null || !businessHours.IsWorkingDay)
         {
             result.IsValid = false;
             result.IsWithinBusinessHours = false;
-            result.ValidationErrors.Add($"Proposed date {startTime:yyyy-MM-dd} ({startTime.DayOfWeek}) is outside operational business days.");
+            result.ValidationErrors.Add($"Proposed date {startTimeLocal:yyyy-MM-dd} ({startTimeLocal.DayOfWeek}) is outside operational business days.");
         }
         else
         {
-            var startOfDayTime = startTime.TimeOfDay;
-            var endOfDayTime = endTime.TimeOfDay;
+            var startOfDayTime = startTimeLocal.TimeOfDay;
+            var endOfDayTime = endTimeLocal.TimeOfDay;
 
-            if (startOfDayTime < businessHours.OpenTime || endOfDayTime > businessHours.CloseTime || startTime.Date != endTime.Date)
+            if (startOfDayTime < businessHours.OpenTime || endOfDayTime > businessHours.CloseTime || startTimeLocal.Date != endTimeLocal.Date)
             {
                 result.IsValid = false;
                 result.IsWithinBusinessHours = false;
-                result.ValidationErrors.Add($"Scheduled slot ({startTime:HH:mm} - {endTime:HH:mm}) is outside operational business hours ({businessHours.OpenTime:hh\\:mm} - {businessHours.CloseTime:hh\\:mm}).");
+                result.ValidationErrors.Add($"Scheduled slot ({startTimeLocal:HH:mm} - {endTimeLocal:HH:mm}) is outside operational business hours ({businessHours.OpenTime:hh\\:mm} - {businessHours.CloseTime:hh\\:mm}).");
             }
         }
 
-        // 3. Deterministic Overlap Conflict Detection
+        // 3. Deterministic Overlap Conflict Detection (uses UTC for DB queries)
         // Overlap rule: ExistingStart < ProposedEnd AND ExistingEnd > ProposedStart
         var activeStatuses = new[]
         {
@@ -134,8 +159,8 @@ public class SchedulingService : ISchedulingService
                         activeStatuses.Contains(w.Status) &&
                         w.ScheduledStartTime.HasValue &&
                         w.ScheduledEndTime.HasValue &&
-                        w.ScheduledStartTime.Value < endTime &&
-                        w.ScheduledEndTime.Value > startTime)
+                        w.ScheduledStartTime.Value < endTimeUtc &&
+                        w.ScheduledEndTime.Value > startTimeUtc)
             .ToListAsync();
 
         if (conflictingWorkOrders.Any())
@@ -157,18 +182,18 @@ public class SchedulingService : ISchedulingService
         }
 
         // 4. SLA Compliance Check
-        if (slaDeadline.HasValue && endTime > slaDeadline.Value)
+        if (slaDeadlineUtc.HasValue && endTimeUtc > slaDeadlineUtc.Value)
         {
             result.IsSlaCompliant = false;
             // For critical/high priority, SLA violation is a hard error; for medium/low it warns or requires manager review
             if (priority.Equals("Critical", StringComparison.OrdinalIgnoreCase) || priority.Equals("High", StringComparison.OrdinalIgnoreCase))
             {
                 result.IsValid = false;
-                result.ValidationErrors.Add($"Proposed completion time ({endTime:yyyy-MM-dd HH:mm}) breaches SLA deadline ({slaDeadline.Value:yyyy-MM-dd HH:mm}).");
+                result.ValidationErrors.Add($"Proposed completion time ({endTimeLocal:yyyy-MM-dd HH:mm}) breaches SLA deadline ({slaDeadlineUtc.Value:yyyy-MM-dd HH:mm}).");
             }
             else
             {
-                result.ValidationErrors.Add($"Warning: Proposed time slot finishes past SLA deadline ({slaDeadline.Value:yyyy-MM-dd HH:mm}).");
+                result.ValidationErrors.Add($"Warning: Proposed time slot finishes past SLA deadline ({slaDeadlineUtc.Value:yyyy-MM-dd HH:mm}).");
             }
         }
 
@@ -195,7 +220,7 @@ public class SchedulingService : ISchedulingService
             throw new NotFoundException($"Technician '{request.TechnicianId}' not found.");
 
         // Determine SLA deadline if not provided
-        var slaDeadline = request.SlaDeadline;
+        var slaDeadline = request.SlaDeadline.HasValue ? NormalizeToUtc(request.SlaDeadline.Value) : (DateTime?)null;
         if (!slaDeadline.HasValue)
         {
             var slaConfig = await _context.SLAConfigurations
@@ -217,7 +242,7 @@ public class SchedulingService : ISchedulingService
         // If requester gave preferred start time, test that first
         if (request.PreferredStartTime.HasValue)
         {
-            var candidateStart = request.PreferredStartTime.Value;
+            var candidateStart = NormalizeToUtc(request.PreferredStartTime.Value);
             var candidateEnd = candidateStart.AddMinutes(durationMinutes);
             var prefValidation = await ValidateScheduleAsync(technician.Id, candidateStart, candidateEnd, durationMinutes, request.Priority, slaDeadline);
             if (prefValidation.IsValid)
@@ -309,7 +334,13 @@ public class SchedulingService : ISchedulingService
             SchemaValid = true
         };
 
-        // Create or Update WorkOrder in PendingManagerApproval state
+        // Determine final status: only require manager approval when a genuine conflict exists
+        var requiresApproval = conflictDetected;
+        var finalStatus = requiresApproval
+            ? WorkOrderStatus.PendingManagerApproval
+            : WorkOrderStatus.Scheduled;
+
+        // Create or Update WorkOrder
         var workOrderCount = await _context.Set<WorkOrder>().CountAsync() + 1;
         var workOrderNumber = $"WO-{DateTime.UtcNow:yyyyMM}-{workOrderCount:D4}";
 
@@ -322,7 +353,7 @@ public class SchedulingService : ISchedulingService
             TechnicianId = technician.Id,
             LocationId = maintenanceRequest.LocationId,
             Priority = workOrderPriority,
-            Status = WorkOrderStatus.PendingManagerApproval,
+            Status = finalStatus,
             ScheduledStartTime = proposedStart,
             ScheduledEndTime = proposedEnd,
             EstimatedDurationMinutes = durationMinutes,
@@ -359,18 +390,24 @@ public class SchedulingService : ISchedulingService
         {
             WorkOrderId = workOrder.Id,
             PreviousStatus = WorkOrderStatus.Draft,
-            NewStatus = WorkOrderStatus.PendingManagerApproval,
+            NewStatus = finalStatus,
             ChangedById = requesterUserId,
-            Reason = "AI Scheduling Agent created schedule proposal awaiting Manager sign-off."
+            Reason = requiresApproval
+                ? "AI Scheduling Agent detected conflict. Schedule proposal awaiting Manager sign-off."
+                : "AI Scheduling Agent created conflict-free schedule."
         };
         await _context.Set<WorkOrderStatusHistory>().AddAsync(statusHistory);
 
         // Register Agent Workflow & Steps for Auditable Execution Observability
+        var workflowStatus = requiresApproval
+            ? WorkflowStatus.WaitingForApproval
+            : WorkflowStatus.Completed;
+
         var agentWorkflow = new AgentWorkflow
         {
             RequestId = maintenanceRequest.Id,
             WorkflowType = "SchedulingPipeline",
-            Status = WorkflowStatus.WaitingForApproval,
+            Status = workflowStatus,
             OutputSummaryJson = JsonSerializer.Serialize(new
             {
                 workOrderId = workOrder.Id,
@@ -387,7 +424,7 @@ public class SchedulingService : ISchedulingService
             WorkflowId = agentWorkflow.Id,
             AgentName = "SchedulingAgent",
             StepName = "Conflict-Free Schedule Generation",
-            Status = WorkflowStatus.WaitingForApproval,
+            Status = workflowStatus,
             InputDataJson = JsonSerializer.Serialize(new
             {
                 requestId = maintenanceRequest.Id,
@@ -464,16 +501,17 @@ public class SchedulingService : ISchedulingService
 
         agentWorkflow.Steps.Add(schedulingStep);
 
-        // Add Approval Action for Human-In-The-Loop
-        agentWorkflow.ApprovalActions.Add(new ApprovalAction
+        // Add Approval Action for Human-In-The-Loop only when a genuine conflict requires manager review
+        if (requiresApproval)
         {
-            WorkflowId = agentWorkflow.Id,
-            Status = ApprovalStatus.Pending,
-            ReasonRequired = conflictDetected
-                ? "Schedule conflict or SLA constraint detected. Manager sign-off / resolution required."
-                : "Work order scheduled by AI. Manager sign-off required before dispatch.",
-            RequestedAt = DateTime.UtcNow
-        });
+            agentWorkflow.ApprovalActions.Add(new ApprovalAction
+            {
+                WorkflowId = agentWorkflow.Id,
+                Status = ApprovalStatus.Pending,
+                ReasonRequired = "Schedule conflict or SLA constraint detected. Manager sign-off / resolution required.",
+                RequestedAt = DateTime.UtcNow
+            });
+        }
 
         await _context.AgentWorkflows.AddAsync(agentWorkflow);
         await _context.SaveChangesAsync();
@@ -504,7 +542,7 @@ public class SchedulingService : ISchedulingService
             WithinBusinessHours = finalValidation.IsWithinBusinessHours,
             WithinTechnicianAvailability = finalValidation.IsWithinTechnicianAvailability,
             SlaCompliant = finalValidation.IsSlaCompliant,
-            ProposalStatus = "PendingManagerApproval",
+            ProposalStatus = finalStatus.ToString(),
             DecisionSummary = decisionSummary,
             ValidationRequired = true,
             ValidationChecklist = checklist

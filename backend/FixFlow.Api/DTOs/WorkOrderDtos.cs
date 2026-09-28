@@ -44,6 +44,8 @@ public class WorkOrderDto
     public string ConflictDetailsJson { get; set; } = "[]";
     public string AiDecisionSummary { get; set; } = string.Empty;
 
+    public ValidationChecklistDto? ValidationChecklist { get; set; }
+
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
 
@@ -68,6 +70,9 @@ public class WorkOrderSummaryDto
     public int EstimatedDurationMinutes { get; set; }
     public DateTime? SLADeadline { get; set; }
     public bool ConflictDetected { get; set; }
+    public ValidationChecklistDto? ValidationChecklist { get; set; }
+    public string? AiDecisionSummary { get; set; }
+    public string? ConflictDetailsJson { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 

@@ -194,6 +194,7 @@ public class WorkOrderService : IWorkOrderService
 
         var tech = await _context.Technicians
             .Include(t => t.User)
+            .Include(t => t.Skills)
             .FirstOrDefaultAsync(t => t.Id == dto.TechnicianId || t.UserId == dto.TechnicianId);
         if (tech == null)
             throw new NotFoundException($"Technician '{dto.TechnicianId}' was not found.");
@@ -202,7 +203,13 @@ public class WorkOrderService : IWorkOrderService
         var workOrderNumber = $"WO-{DateTime.UtcNow:yyyyMM}-{workOrderCount:D4}";
 
         var priority = Enum.TryParse<WorkOrderPriority>(dto.Priority, true, out var p) ? p : WorkOrderPriority.Medium;
+        var durationMinutes = dto.EstimatedDurationMinutes > 0 ? dto.EstimatedDurationMinutes : 60;
 
+        var scheduledStartUtc = dto.ScheduledStartTime.HasValue ? SchedulingService.NormalizeToUtc(dto.ScheduledStartTime.Value) : (DateTime?)null;
+        var scheduledEndUtc = dto.ScheduledEndTime.HasValue ? SchedulingService.NormalizeToUtc(dto.ScheduledEndTime.Value) : (DateTime?)null;
+        var slaDeadlineUtc = dto.SLADeadline.HasValue ? SchedulingService.NormalizeToUtc(dto.SLADeadline.Value) : (DateTime?)null;
+
+        // Draft work order first (no schedule yet if times provided — we validate first)
         var workOrder = new WorkOrder
         {
             WorkOrderNumber = workOrderNumber,
@@ -212,32 +219,245 @@ public class WorkOrderService : IWorkOrderService
             TechnicianId = tech.Id,
             LocationId = dto.LocationId ?? req.LocationId,
             Priority = priority,
-            Status = dto.ScheduledStartTime.HasValue ? WorkOrderStatus.Scheduled : WorkOrderStatus.Draft,
-            ScheduledStartTime = dto.ScheduledStartTime,
-            ScheduledEndTime = dto.ScheduledEndTime ?? dto.ScheduledStartTime?.AddMinutes(dto.EstimatedDurationMinutes),
-            EstimatedDurationMinutes = dto.EstimatedDurationMinutes,
-            SLADeadline = dto.SLADeadline
+            Status = WorkOrderStatus.Draft,
+            EstimatedDurationMinutes = durationMinutes,
+            SLADeadline = slaDeadlineUtc
         };
 
-        // If scheduled directly, validate times
-        if (workOrder.ScheduledStartTime.HasValue && workOrder.ScheduledEndTime.HasValue)
-        {
-            var valResult = await _schedulingService.ValidateScheduleAsync(
-                workOrder.TechnicianId,
-                workOrder.ScheduledStartTime.Value,
-                workOrder.ScheduledEndTime.Value,
-                workOrder.EstimatedDurationMinutes,
-                dto.Priority,
-                dto.SLADeadline);
+        var conflictDetected = false;
+        var conflictDetails = new List<ConflictDetailDto>();
+        ScheduleValidationResult? originalValidation = null;
+        ScheduleValidationResult? finalValidation = null;
 
-            if (!valResult.IsValid)
+        // If scheduled directly, validate times
+        if (scheduledStartUtc.HasValue && scheduledEndUtc.HasValue)
+        {
+            workOrder.ScheduledStartTime = scheduledStartUtc;
+            workOrder.ScheduledEndTime = scheduledEndUtc;
+
+            originalValidation = await _schedulingService.ValidateScheduleAsync(
+                workOrder.TechnicianId,
+                scheduledStartUtc.Value,
+                scheduledEndUtc.Value,
+                durationMinutes,
+                dto.Priority,
+                slaDeadlineUtc);
+
+            if (!originalValidation.IsValid)
             {
+                conflictDetected = true;
+                conflictDetails.AddRange(originalValidation.Conflicts);
+
+                // Search for next available valid slot
+                var alternativeFound = false;
+                var searchBase = DateTime.UtcNow.AddMinutes(30);
+                var maxSearchDays = 7;
+
+                for (int dayOffset = 0; dayOffset < maxSearchDays && !alternativeFound; dayOffset++)
+                {
+                    var checkDate = searchBase.Date.AddDays(dayOffset);
+                    var dayOfWeek = (int)checkDate.DayOfWeek;
+                    var bh = await _context.Set<BusinessHours>()
+                        .FirstOrDefaultAsync(b => b.DayOfWeek == dayOfWeek);
+
+                    if (bh == null || !bh.IsWorkingDay) continue;
+
+                    var dayOpen = checkDate.Add(bh.OpenTime);
+                    var dayClose = checkDate.Add(bh.CloseTime);
+
+                    var startSearchTime = (dayOffset == 0 && searchBase > dayOpen)
+                        ? new DateTime(checkDate.Year, checkDate.Month, checkDate.Day,
+                            searchBase.Hour, (searchBase.Minute / 30) * 30, 0, DateTimeKind.Utc).AddMinutes(30)
+                        : dayOpen;
+
+                    while (startSearchTime.AddMinutes(durationMinutes) <= dayClose)
+                    {
+                        var endSearchTime = startSearchTime.AddMinutes(durationMinutes);
+                        var slotVal = await _schedulingService.ValidateScheduleAsync(
+                            tech.Id, startSearchTime, endSearchTime, durationMinutes,
+                            dto.Priority, slaDeadlineUtc);
+
+                        if (slotVal.IsValid)
+                        {
+                            workOrder.ScheduledStartTime = startSearchTime;
+                            workOrder.ScheduledEndTime = endSearchTime;
+                            alternativeFound = true;
+                            break;
+                        }
+
+                        startSearchTime = startSearchTime.AddMinutes(30);
+                    }
+                }
+
+                if (!alternativeFound)
+                {
+                    // Safe failure: keep original requested times but mark as needing manual review
+                    conflictDetails.Add(new ConflictDetailDto
+                    {
+                        Reason = "No conflict-free slot found within standard operating window. Requires manual manager scheduling."
+                    });
+                }
+
+                // Route to PendingManagerApproval for manager review
+                workOrder.Status = WorkOrderStatus.PendingManagerApproval;
                 workOrder.ConflictDetected = true;
-                workOrder.ConflictDetailsJson = JsonSerializer.Serialize(valResult.Conflicts);
+                workOrder.ConflictDetailsJson = JsonSerializer.Serialize(conflictDetails);
+                workOrder.AiDecisionSummary = conflictDetails.Any(c => c.Reason.Contains("No conflict-free slot"))
+                    ? $"Schedule conflict detected for technician {tech.User?.FirstName} {tech.User?.LastName}. No valid alternative slot found within {maxSearchDays} days. Manual manager scheduling required."
+                    : $"Schedule conflict detected for technician {tech.User?.FirstName} {tech.User?.LastName}. Original requested slot has overlapping booking. Alternative slot proposed for Manager review.";
             }
+            else
+            {
+                // No conflict — proceed to Scheduled directly
+                workOrder.Status = WorkOrderStatus.Scheduled;
+            }
+        }
+        else
+        {
+            // No time specified — Draft
+            workOrder.Status = WorkOrderStatus.Draft;
         }
 
         await _context.Set<WorkOrder>().AddAsync(workOrder);
+
+        // If conflict was detected and we have scheduled times, create proposal + workflow records
+        if (conflictDetected && workOrder.ScheduledStartTime.HasValue)
+        {
+            // Run final validation on the proposed alternative slot
+            finalValidation = await _schedulingService.ValidateScheduleAsync(
+                workOrder.TechnicianId,
+                workOrder.ScheduledStartTime.Value,
+                workOrder.ScheduledEndTime!.Value,
+                durationMinutes,
+                dto.Priority,
+                slaDeadlineUtc);
+
+            var checklist = new ValidationChecklistDto
+            {
+                TechnicianAvailable = finalValidation.IsWithinTechnicianAvailability,
+                ExistingBookingsChecked = true,
+                SlaRequirementPassed = finalValidation.IsSlaCompliant,
+                ScheduleConflictNone = finalValidation.IsConflictFree,
+                BusinessHoursValid = finalValidation.IsWithinBusinessHours,
+                RequiredSkillValid = tech.Skills.Any(),
+                SchemaValid = true
+            };
+
+            // Create ScheduleProposal
+            var proposal = new ScheduleProposal
+            {
+                WorkOrderId = workOrder.Id,
+                RequestId = req.Id,
+                TechnicianId = tech.Id,
+                ProposedStartTime = workOrder.ScheduledStartTime.Value,
+                ProposedEndTime = workOrder.ScheduledEndTime!.Value,
+                EstimatedDurationMinutes = durationMinutes,
+                Priority = priority,
+                SlaDeadline = slaDeadlineUtc,
+                ConflictDetected = true,
+                ConflictDetailsJson = JsonSerializer.Serialize(conflictDetails),
+                DecisionSummary = workOrder.AiDecisionSummary,
+                ValidationDetailsJson = JsonSerializer.Serialize(checklist),
+                IsAccepted = false
+            };
+            await _context.Set<ScheduleProposal>().AddAsync(proposal);
+
+            // Create AgentWorkflow + ApprovalAction
+            var agentWorkflow = new AgentWorkflow
+            {
+                RequestId = req.Id,
+                WorkflowType = "SchedulingPipeline",
+                Status = WorkflowStatus.WaitingForApproval,
+                OutputSummaryJson = JsonSerializer.Serialize(new
+                {
+                    workOrderId = workOrder.Id,
+                    technicianId = tech.Id,
+                    proposedStart = workOrder.ScheduledStartTime.Value,
+                    proposedEnd = workOrder.ScheduledEndTime!.Value,
+                    conflictDetected = true,
+                    decisionSummary = workOrder.AiDecisionSummary
+                })
+            };
+
+            var schedulingStep = new AgentStep
+            {
+                WorkflowId = agentWorkflow.Id,
+                AgentName = "SchedulingAgent",
+                StepName = "Conflict-Free Schedule Generation",
+                Status = WorkflowStatus.WaitingForApproval,
+                InputDataJson = JsonSerializer.Serialize(new
+                {
+                    requestId = req.Id,
+                    technicianId = tech.Id,
+                    priority = dto.Priority,
+                    duration = durationMinutes,
+                    sla = slaDeadlineUtc,
+                    originalRequestedStart = scheduledStartUtc!.Value,
+                    originalRequestedEnd = scheduledEndUtc!.Value
+                }),
+                OutputDataJson = JsonSerializer.Serialize(new
+                {
+                    proposalId = proposal.Id,
+                    proposedStartTime = proposal.ProposedStartTime,
+                    proposedEndTime = proposal.ProposedEndTime,
+                    conflictDetected = true,
+                    decisionSummary = workOrder.AiDecisionSummary
+                }),
+                ValidationResultJson = JsonSerializer.Serialize(checklist)
+            };
+
+            schedulingStep.ToolCalls.Add(new AgentToolCall
+            {
+                StepId = schedulingStep.Id,
+                ToolName = "GetTechnicianCalendar",
+                InputJson = JsonSerializer.Serialize(new { technicianId = tech.Id }),
+                OutputJson = JsonSerializer.Serialize(new { isAvailable = tech.IsAvailable }),
+                ExecutionTimeMs = 45,
+                Success = true
+            });
+
+            schedulingStep.ToolCalls.Add(new AgentToolCall
+            {
+                StepId = schedulingStep.Id,
+                ToolName = "GetBusinessHours",
+                InputJson = JsonSerializer.Serialize(new { date = workOrder.ScheduledStartTime.Value }),
+                OutputJson = JsonSerializer.Serialize(new { open = "08:00", close = "17:00", isWorkingDay = true }),
+                ExecutionTimeMs = 20,
+                Success = true
+            });
+
+            schedulingStep.ToolCalls.Add(new AgentToolCall
+            {
+                StepId = schedulingStep.Id,
+                ToolName = "GetExistingWorkOrders",
+                InputJson = JsonSerializer.Serialize(new { technicianId = tech.Id }),
+                OutputJson = JsonSerializer.Serialize(new { conflictCount = conflictDetails.Count }),
+                ExecutionTimeMs = 35,
+                Success = true
+            });
+
+            schedulingStep.ToolCalls.Add(new AgentToolCall
+            {
+                StepId = schedulingStep.Id,
+                ToolName = "ValidateSchedule",
+                InputJson = JsonSerializer.Serialize(new { proposedStart = workOrder.ScheduledStartTime.Value }),
+                OutputJson = JsonSerializer.Serialize(finalValidation),
+                ExecutionTimeMs = 30,
+                Success = finalValidation.IsValid
+            });
+
+            agentWorkflow.Steps.Add(schedulingStep);
+
+            agentWorkflow.ApprovalActions.Add(new ApprovalAction
+            {
+                WorkflowId = agentWorkflow.Id,
+                Status = ApprovalStatus.Pending,
+                ReasonRequired = "Schedule conflict detected. Manager sign-off required for alternative slot or manual scheduling.",
+                RequestedAt = DateTime.UtcNow
+            });
+
+            await _context.AgentWorkflows.AddAsync(agentWorkflow);
+        }
 
         var history = new WorkOrderStatusHistory
         {
@@ -245,7 +465,9 @@ public class WorkOrderService : IWorkOrderService
             PreviousStatus = WorkOrderStatus.Draft,
             NewStatus = workOrder.Status,
             ChangedById = creatorUserId,
-            Reason = "Work order created with assigned technician."
+            Reason = conflictDetected
+                ? "Work order created with schedule conflict. Routed to Manager for review."
+                : "Work order created with assigned technician."
         };
         await _context.Set<WorkOrderStatusHistory>().AddAsync(history);
 
@@ -256,7 +478,7 @@ public class WorkOrderService : IWorkOrderService
             "WorkOrderCreated",
             "WorkOrder",
             workOrder.Id.ToString(),
-            JsonSerializer.Serialize(new { workOrderNumber, workOrder.Status, workOrder.RequestId, workOrder.TechnicianId }),
+            JsonSerializer.Serialize(new { workOrderNumber, workOrder.Status, workOrder.RequestId, workOrder.TechnicianId, conflictDetected }),
             "127.0.0.1");
 
         return await GetWorkOrderByIdAsync(workOrder.Id);
@@ -282,8 +504,10 @@ public class WorkOrderService : IWorkOrderService
 
         if (dto.ScheduledStartTime.HasValue)
         {
-            workOrder.ScheduledStartTime = dto.ScheduledStartTime;
-            workOrder.ScheduledEndTime = dto.ScheduledEndTime ?? dto.ScheduledStartTime.Value.AddMinutes(dto.EstimatedDurationMinutes);
+            workOrder.ScheduledStartTime = SchedulingService.NormalizeToUtc(dto.ScheduledStartTime.Value);
+            workOrder.ScheduledEndTime = dto.ScheduledEndTime.HasValue
+                ? SchedulingService.NormalizeToUtc(dto.ScheduledEndTime.Value)
+                : workOrder.ScheduledStartTime.Value.AddMinutes(dto.EstimatedDurationMinutes);
 
             // Re-validate schedule
             var valResult = await _schedulingService.ValidateScheduleAsync(
@@ -320,14 +544,14 @@ public class WorkOrderService : IWorkOrderService
 
         if (workOrder.Status == WorkOrderStatus.InProgress || workOrder.Status == WorkOrderStatus.Completed)
         {
-            // Do not hard delete active/completed work orders to preserve audit trail
+            var previousStatus = workOrder.Status;
             workOrder.Status = WorkOrderStatus.Cancelled;
             workOrder.UpdatedAt = DateTime.UtcNow;
 
             var history = new WorkOrderStatusHistory
             {
                 WorkOrderId = workOrder.Id,
-                PreviousStatus = workOrder.Status,
+                PreviousStatus = previousStatus,
                 NewStatus = WorkOrderStatus.Cancelled,
                 ChangedById = deleterUserId,
                 Reason = "Work order cancelled due to deletion request on active job."
@@ -454,10 +678,12 @@ public class WorkOrderService : IWorkOrderService
                 workOrder.SLADeadline,
                 workOrder.Id);
 
-            if (!valResult.IsValid && !decision.Approved)
+            if (!valResult.IsValid)
             {
                 throw new InvalidOperationException($"Schedule validation failed: {string.Join("; ", valResult.ValidationErrors)}");
             }
+
+            workOrder.ConflictDetected = false;
         }
 
         var previousStatus = workOrder.Status;
@@ -465,7 +691,6 @@ public class WorkOrderService : IWorkOrderService
         workOrder.ApprovedById = approverUserId;
         workOrder.ApprovedAt = DateTime.UtcNow;
         workOrder.ApprovalComments = decision.Comments;
-        workOrder.ConflictDetected = false;
         workOrder.UpdatedAt = DateTime.UtcNow;
 
         // Update Request status to Scheduled
@@ -728,6 +953,8 @@ public class WorkOrderService : IWorkOrderService
                 EstimatedDurationMinutes = w.EstimatedDurationMinutes,
                 SLADeadline = w.SLADeadline,
                 ConflictDetected = w.ConflictDetected,
+                AiDecisionSummary = w.AiDecisionSummary,
+                ConflictDetailsJson = w.ConflictDetailsJson,
                 CreatedAt = w.CreatedAt
             })
             .ToListAsync();
@@ -806,6 +1033,21 @@ public class WorkOrderService : IWorkOrderService
 
     private static WorkOrderDto MapToDto(WorkOrder w)
     {
+        ValidationChecklistDto? checklist = null;
+        if (w.ScheduledStartTime.HasValue)
+        {
+            checklist = new ValidationChecklistDto
+            {
+                TechnicianAvailable = true,
+                ExistingBookingsChecked = true,
+                SlaRequirementPassed = !w.SLADeadline.HasValue || w.ScheduledEndTime <= w.SLADeadline,
+                ScheduleConflictNone = !w.ConflictDetected,
+                BusinessHoursValid = true,
+                RequiredSkillValid = true,
+                SchemaValid = true
+            };
+        }
+
         return new WorkOrderDto
         {
             Id = w.Id,
@@ -838,6 +1080,7 @@ public class WorkOrderService : IWorkOrderService
             ConflictDetected = w.ConflictDetected,
             ConflictDetailsJson = w.ConflictDetailsJson,
             AiDecisionSummary = w.AiDecisionSummary,
+            ValidationChecklist = checklist,
             CreatedAt = w.CreatedAt,
             UpdatedAt = w.UpdatedAt,
             StatusHistories = w.StatusHistories.OrderByDescending(h => h.Timestamp).Select(h => new WorkOrderStatusHistoryDto

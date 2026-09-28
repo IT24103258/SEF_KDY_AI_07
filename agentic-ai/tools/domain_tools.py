@@ -1,3 +1,4 @@
+from datetime import timedelta
 from tools.base_tool import BaseTool
 from typing import Dict, Any, Optional, List, Tuple
 
@@ -272,9 +273,8 @@ class ValidateScheduleTool(BaseTool):
         sla_deadline: Optional[str] = None,
         **kwargs
     ) -> Dict[str, Any]:
-        """
-        Validates the candidate slot against all domain constraints using supplied booking and availability data.
-        """
+        from scheduling.slot_planner import parse_iso_to_aware, DAY_NAMES, IST
+
         conflicts = []
         validation_messages = []
         is_valid = True
@@ -282,9 +282,19 @@ class ValidateScheduleTool(BaseTool):
         within_bh = True
         sla_compliant = True
 
-        if not start_time or not end_time or start_time >= end_time:
+        if not start_time or not end_time:
             is_valid = False
-            validation_messages.append("Start time must be earlier than end time.")
+            validation_messages.append("Start time and end time are required.")
+            return {
+                "technician_id": technician_id,
+                "is_valid": is_valid,
+                "conflict_free": conflict_free,
+                "within_business_hours": within_bh,
+                "within_technician_availability": is_technician_available,
+                "sla_compliant": sla_compliant,
+                "conflicts": conflicts,
+                "validation_messages": validation_messages,
+            }
 
         if duration_minutes <= 0:
             is_valid = False
@@ -294,13 +304,63 @@ class ValidateScheduleTool(BaseTool):
             is_valid = False
             validation_messages.append("Technician is unavailable.")
 
-        # Check existing bookings for overlap: existing_start < proposed_end AND existing_end > proposed_start
+        dt_start = parse_iso_to_aware(start_time)
+        dt_end = parse_iso_to_aware(end_time)
+
+        if dt_start and dt_end and dt_start >= dt_end:
+            is_valid = False
+            validation_messages.append("Start time must be earlier than end time.")
+        elif not dt_start or not dt_end:
+            if start_time >= end_time:
+                is_valid = False
+                validation_messages.append("Start time must be earlier than end time.")
+
+        if dt_start and dt_end and duration_minutes > 0:
+            expected_end = dt_start + timedelta(minutes=duration_minutes)
+            actual_diff = abs((dt_end - expected_end).total_seconds())
+            if actual_diff > 60:
+                validation_messages.append(
+                    f"Duration inconsistency: proposed span is {int((dt_end - dt_start).total_seconds() // 60)} min "
+                    f"but duration_minutes is {duration_minutes}."
+                )
+
+        if dt_start and business_hours:
+            bh = business_hours or {}
+            working_days = bh.get("working_days", ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"])
+            day_name = DAY_NAMES[dt_start.weekday()]
+
+            if day_name in working_days:
+                weekday_open = bh.get("weekday_open", "08:00:00")
+                if day_name == "Saturday":
+                    weekday_close = bh.get("saturday_close", "13:00:00")
+                else:
+                    weekday_close = bh.get("weekday_close", "17:00:00")
+
+                open_parts = weekday_open.split(":")
+                close_parts = weekday_close.split(":")
+                biz_open = dt_start.replace(hour=int(open_parts[0]), minute=int(open_parts[1]) if len(open_parts) > 1 else 0, second=0, microsecond=0)
+                biz_close = dt_start.replace(hour=int(close_parts[0]), minute=int(close_parts[1]) if len(close_parts) > 1 else 0, second=0, microsecond=0)
+
+                if dt_start < biz_open or dt_end > biz_close:
+                    within_bh = False
+            else:
+                within_bh = False
+
         bookings = existing_bookings or []
         for b in bookings:
             b_start = b.get("start_time") or b.get("start")
             b_end = b.get("end_time") or b.get("end")
             if b_start and b_end:
-                if b_start < end_time and b_end > start_time:
+                b_dt_start = parse_iso_to_aware(b_start) if isinstance(b_start, str) else b_start
+                b_dt_end = parse_iso_to_aware(b_end) if isinstance(b_end, str) else b_end
+
+                has_overlap = False
+                if b_dt_start and b_dt_end and dt_start and dt_end:
+                    has_overlap = b_dt_start < dt_end and b_dt_end > dt_start
+                elif b_start and b_end:
+                    has_overlap = b_start < end_time and b_end > start_time
+
+                if has_overlap:
                     conflict_free = False
                     is_valid = False
                     wo_id = b.get("work_order_id")
@@ -312,11 +372,17 @@ class ValidateScheduleTool(BaseTool):
                     conflicts.append(f"Overlap with {desc} ({b_start} - {b_end})")
                     validation_messages.append(f"Schedule conflict with {desc} ({b_start} - {b_end}).")
 
-        # Check SLA compliance
-        if sla_deadline and end_time > sla_deadline:
-            sla_compliant = False
-            is_valid = False
-            validation_messages.append(f"Proposed completion time ({end_time}) breaches SLA deadline ({sla_deadline}).")
+        if sla_deadline:
+            dt_sla = parse_iso_to_aware(sla_deadline)
+            if dt_sla and dt_end:
+                if dt_end > dt_sla:
+                    sla_compliant = False
+                    is_valid = False
+                    validation_messages.append(f"Proposed completion time ({end_time}) breaches SLA deadline ({sla_deadline}).")
+            elif end_time and end_time > sla_deadline:
+                sla_compliant = False
+                is_valid = False
+                validation_messages.append(f"Proposed completion time ({end_time}) breaches SLA deadline ({sla_deadline}).")
 
         if is_valid and not validation_messages:
             validation_messages.append("All schedule constraints passed deterministic validation.")
@@ -329,7 +395,7 @@ class ValidateScheduleTool(BaseTool):
             "within_technician_availability": is_technician_available,
             "sla_compliant": sla_compliant,
             "conflicts": conflicts,
-            "validation_messages": validation_messages
+            "validation_messages": validation_messages,
         }
 
 

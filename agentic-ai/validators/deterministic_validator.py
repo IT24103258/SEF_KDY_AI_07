@@ -1,6 +1,8 @@
 from pydantic import BaseModel, ValidationError
 from typing import Type, Tuple, Dict, Any, Optional, List
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+
+_IST = timezone(timedelta(hours=5, minutes=30))
 
 def _parse_iso_timestamp(ts: Optional[str]) -> Optional[datetime]:
     if not ts or not isinstance(ts, str):
@@ -10,6 +12,11 @@ def _parse_iso_timestamp(ts: Optional[str]) -> Optional[datetime]:
         return datetime.fromisoformat(clean_ts)
     except Exception:
         return None
+
+def _to_ist(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=_IST)
+    return dt.astimezone(_IST)
 
 class DeterministicValidator:
     VALID_RISK_LEVELS = {"Low", "Medium", "High", "Critical"}
@@ -111,6 +118,7 @@ class DeterministicValidator:
             return False, output_data, "Schedule rejected: Technician is not available for the requested slot."
 
         # Deterministic Overlap Conflict Evaluation against existing bookings
+        output_data["conflict_detected"] = False
         bookings = output_data.get("existing_bookings") or context.get("existing_bookings") or []
         for b in bookings:
             b_start_str = b.get("start_time") or b.get("start") or b.get("proposed_start")

@@ -169,8 +169,8 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
         title: title.trim(),
         description: description.trim(),
         priority: priority,
-        scheduledStartTime: scheduledStartTime ? new Date(scheduledStartTime).toISOString() : null,
-        scheduledEndTime: scheduledEndTime ? new Date(scheduledEndTime).toISOString() : null,
+        scheduledStartTime: scheduledStartTime || null,
+        scheduledEndTime: scheduledEndTime || null,
         estimatedDurationMinutes: Math.max(1, parseInt(estimatedDurationMinutes, 10) || 60)
       };
 

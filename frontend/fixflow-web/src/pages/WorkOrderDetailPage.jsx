@@ -441,14 +441,18 @@ export const WorkOrderDetailPage = () => {
         {/* Tab 2: Validation Checklist */}
         {activeTab === 'validation' && (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
-            {[
-              { label: 'No Schedule Conflicts', passed: !workOrder.conflictDetected },
-              { label: 'Within SLA Deadline', passed: true },
-              { label: 'Technician Available', passed: true },
-              { label: 'Operational Business Hours', passed: true },
-              { label: 'Skill Set Match', passed: true },
-              { label: 'Pydantic Schema Valid', passed: true }
-            ].map((check, idx) => (
+            {(() => {
+              const vc = workOrder.validationChecklist;
+              const checks = [
+                { label: 'No Schedule Conflicts', passed: vc ? vc.scheduleConflictNone : !workOrder.conflictDetected },
+                { label: 'Within SLA Deadline', passed: vc ? vc.slaRequirementPassed : true },
+                { label: 'Technician Available', passed: vc ? vc.technicianAvailable : true },
+                { label: 'Operational Business Hours', passed: vc ? vc.businessHoursValid : true },
+                { label: 'Skill Set Match', passed: vc ? vc.requiredSkillValid : true },
+                { label: 'Pydantic Schema Valid', passed: vc ? vc.schemaValid : true }
+              ];
+              return checks;
+            })().map((check, idx) => (
               <div
                 key={idx}
                 style={{

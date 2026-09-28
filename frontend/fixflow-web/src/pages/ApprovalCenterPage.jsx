@@ -276,42 +276,21 @@ export const ApprovalCenterPage = () => {
                       Validation Checks
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '0.8rem' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>Technician availability:</span>
-                        <span style={{ color: 'var(--success-color)', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
-                          <Check size={13} /> Valid
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>Existing bookings checked:</span>
-                        <span style={{ color: 'var(--success-color)', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
-                          <Check size={13} /> Valid
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>SLA requirement:</span>
-                        <span style={{ color: 'var(--success-color)', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
-                          <Check size={13} /> Valid
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>Schedule conflict:</span>
-                        <span style={{ color: !isConflict ? 'var(--success-color)' : 'var(--danger-color)', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
-                          {!isConflict ? <Check size={13} /> : <X size={13} />} {!isConflict ? 'None' : 'Conflict'}
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>Business hours:</span>
-                        <span style={{ color: 'var(--success-color)', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
-                          <Check size={13} /> Valid
-                        </span>
-                      </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ color: 'var(--text-secondary)' }}>Required skill:</span>
-                        <span style={{ color: 'var(--success-color)', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
-                          <Check size={13} /> Valid
-                        </span>
-                      </div>
+                      {[
+                        { label: 'Technician availability', passed: true },
+                        { label: 'Existing bookings checked', passed: true },
+                        { label: 'SLA requirement', passed: true },
+                        { label: 'Schedule conflict', passed: !isConflict },
+                        { label: 'Business hours', passed: true },
+                        { label: 'Required skill', passed: true }
+                      ].map((check, idx) => (
+                        <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>{check.label}:</span>
+                          <span style={{ color: check.passed ? 'var(--success-color)' : 'var(--danger-color)', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>
+                            {check.passed ? <Check size={13} /> : <X size={13} />} {check.passed ? 'Valid' : 'Failed'}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
@@ -328,9 +307,9 @@ export const ApprovalCenterPage = () => {
                       <Sparkles size={14} /> AI Decision Summary
                     </div>
                     <p style={{ fontSize: '0.84rem', color: 'var(--text-primary)', margin: 0, lineHeight: 1.45 }}>
-                      {isConflict
+                      {wo.aiDecisionSummary || (isConflict
                         ? 'Schedule conflict detected with technician calendar. Alternative available window evaluated and presented for Manager sign-off.'
-                        : 'Selected an available technician slot within business hours and before the SLA deadline. Existing bookings were checked and no overlapping booking was detected.'}
+                        : 'Selected an available technician slot within business hours and before the SLA deadline. Existing bookings were checked and no overlapping booking was detected.')}
                     </p>
                   </div>
                 </div>
