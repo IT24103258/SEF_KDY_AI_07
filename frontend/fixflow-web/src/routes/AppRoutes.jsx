@@ -29,15 +29,12 @@ import {
   RequestDetailPage
 } from '../pages/Pages';
 
-<<<<<<< HEAD
 import { WorkOrdersPage } from '../pages/WorkOrdersPage';
 import { WorkOrderDetailPage } from '../pages/WorkOrderDetailPage';
 import { ApprovalCenterPage } from '../pages/ApprovalCenterPage';
 import { CalendarPage } from '../pages/CalendarPage';
 import { WorkOrderReportsPage } from '../pages/WorkOrderReportsPage';
-=======
 import TechnicianAssignment from '../pages/TechnicianAssignment';
->>>>>>> main
 
 import { getHomePath } from '../utils/roleRoutes';
 import { PriorityDashboard } from '../pages/PriorityDashboard';
