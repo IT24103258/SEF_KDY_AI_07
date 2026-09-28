@@ -1,8 +1,6 @@
-<<<<<<< HEAD
 from datetime import timedelta
 from tools.base_tool import BaseTool
 from typing import Dict, Any, Optional, List, Tuple
-=======
 """
 Component 2 — Domain Tools for Risk & Priority Assessment.
 
@@ -39,7 +37,6 @@ def _normalize_level(value: Optional[str]) -> Optional[str]:
 # ---------------------------------------------------------------------------
 # Shared tools (used by multiple agents — do not break their interfaces)
 # ---------------------------------------------------------------------------
->>>>>>> main
 
 class GetAssetDetailsTool(BaseTool):
     def __init__(self):
@@ -353,10 +350,8 @@ class SavePriorityAssessmentTool(BaseTool):
             "saved": False,  # Explicitly false
         }
 
-<<<<<<< HEAD
-# ============================================================
-# COMPONENT 4 — SCHEDULING & WORK ORDER MANAGEMENT TOOLS
-# ============================================================
+
+
 
 # ============================================================
 # COMPONENT 4 — SCHEDULING & WORK ORDER MANAGEMENT TOOLS
@@ -611,13 +606,11 @@ class ValidateScheduleTool(BaseTool):
 
 
 # Tool Registry for Allow-Listing
-=======
 
 # ---------------------------------------------------------------------------
 # Tool Registry / Allow-List
 # ---------------------------------------------------------------------------
 
->>>>>>> main
 ALLOW_LISTED_TOOLS = {
     # Shared tools
     "get_asset_details": GetAssetDetailsTool(),
@@ -641,7 +634,7 @@ ALLOW_LISTED_TOOLS = {
     "SaveRiskAssessment": SaveRiskAssessmentTool(),
     "save_priority_assessment": SavePriorityAssessmentTool(),
     "SavePriorityAssessment": SavePriorityAssessmentTool(),
-<<<<<<< HEAD
+    
     # Component 4: Scheduling & Work Order Management Allow-Listed Tools
     "get_technician_calendar": GetTechnicianCalendarTool(),
     "GetTechnicianCalendar": GetTechnicianCalendarTool(),
@@ -653,6 +646,4 @@ ALLOW_LISTED_TOOLS = {
     "CreateScheduleProposal": CreateScheduleProposalTool(),
     "validate_schedule": ValidateScheduleTool(),
     "ValidateSchedule": ValidateScheduleTool()
-=======
->>>>>>> main
 }

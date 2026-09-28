@@ -352,101 +352,6 @@ namespace FixFlow.Api.Migrations
                     b.ToTable("AuditLogs");
                 });
 
-            modelBuilder.Entity("FixFlow.Api.Models.BusinessHours", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<TimeSpan>("CloseTime")
-                        .HasColumnType("interval");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DayName")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<int>("DayOfWeek")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsWorkingDay")
-                        .HasColumnType("boolean");
-
-                    b.Property<TimeSpan>("OpenTime")
-                        .HasColumnType("interval");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("DayOfWeek")
-                        .IsUnique();
-
-                    b.ToTable("BusinessHours");
-                });
-
-            modelBuilder.Entity("FixFlow.Api.Models.CompletionEvidence", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Caption")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FileKey")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("character varying(255)");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("OriginalFileName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("SignatureDataUrl")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("SignerName")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("character varying(150)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("UploadedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("UploadedById")
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("WorkOrderId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("UploadedById");
-
-                    b.HasIndex("WorkOrderId");
-
-                    b.ToTable("CompletionEvidence");
-                });
-
             modelBuilder.Entity("FixFlow.Api.Models.IssueCategory", b =>
                 {
                     b.Property<Guid>("Id")
@@ -837,78 +742,6 @@ namespace FixFlow.Api.Migrations
                     b.ToTable("SLAConfigurations");
                 });
 
-            modelBuilder.Entity("FixFlow.Api.Models.ScheduleProposal", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ConflictDetailsJson")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("ConflictDetected")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("DecisionSummary")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("EstimatedDurationMinutes")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsAccepted")
-                        .HasColumnType("boolean");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("Priority")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<DateTime>("ProposedEndTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime>("ProposedStartTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("RequestId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("SlaDeadline")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("TechnicianId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ValidationDetailsJson")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<Guid?>("WorkOrderId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ProposedStartTime");
-
-                    b.HasIndex("RequestId");
-
-                    b.HasIndex("TechnicianId");
-
-                    b.HasIndex("WorkOrderId");
-
-                    b.ToTable("ScheduleProposal");
-                });
-
             modelBuilder.Entity("FixFlow.Api.Models.Skill", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1034,203 +867,6 @@ namespace FixFlow.Api.Migrations
                     b.ToTable("Users");
                 });
 
-            modelBuilder.Entity("FixFlow.Api.Models.WorkNote", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid>("AuthorId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("NoteText")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("Timestamp")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("WorkOrderId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AuthorId");
-
-                    b.HasIndex("WorkOrderId");
-
-                    b.ToTable("WorkNote");
-                });
-
-            modelBuilder.Entity("FixFlow.Api.Models.WorkOrder", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("ActualEndTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ActualStartTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("AiDecisionSummary")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("ApprovalComments")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ApprovedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid?>("ApprovedById")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("ConflictDetailsJson")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<bool>("ConflictDetected")
-                        .HasColumnType("boolean");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Description")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("EstimatedDurationMinutes")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<Guid?>("LocationId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Priority")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<Guid>("RequestId")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime?>("SLADeadline")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ScheduledEndTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("ScheduledStartTime")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<Guid>("TechnicianId")
-                        .HasColumnType("uuid");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("WorkOrderNumber")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ApprovedById");
-
-                    b.HasIndex("LocationId");
-
-                    b.HasIndex("Priority");
-
-                    b.HasIndex("RequestId");
-
-                    b.HasIndex("ScheduledEndTime");
-
-                    b.HasIndex("ScheduledStartTime");
-
-                    b.HasIndex("Status");
-
-                    b.HasIndex("TechnicianId");
-
-                    b.HasIndex("WorkOrderNumber")
-                        .IsUnique();
-
-                    b.HasIndex("TechnicianId", "ScheduledStartTime", "ScheduledEndTime");
-
-                    b.ToTable("WorkOrder");
-                });
-
-            modelBuilder.Entity("FixFlow.Api.Models.WorkOrderStatusHistory", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid");
-
-                    b.Property<Guid?>("ChangedById")
-                        .HasColumnType("uuid");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<bool>("IsDeleted")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("NewStatus")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("PreviousStatus")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("Timestamp")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<Guid>("WorkOrderId")
-                        .HasColumnType("uuid");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ChangedById");
-
-                    b.HasIndex("WorkOrderId");
-
-                    b.ToTable("WorkOrderStatusHistory");
-                });
-
             modelBuilder.Entity("SkillTechnician", b =>
                 {
                     b.Property<Guid>("SkillsId")
@@ -1335,25 +971,6 @@ namespace FixFlow.Api.Migrations
                     b.Navigation("User");
                 });
 
-            modelBuilder.Entity("FixFlow.Api.Models.CompletionEvidence", b =>
-                {
-                    b.HasOne("FixFlow.Api.Models.User", "UploadedBy")
-                        .WithMany()
-                        .HasForeignKey("UploadedById")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("FixFlow.Api.Models.WorkOrder", "WorkOrder")
-                        .WithMany("Evidence")
-                        .HasForeignKey("WorkOrderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("UploadedBy");
-
-                    b.Navigation("WorkOrder");
-                });
-
             modelBuilder.Entity("FixFlow.Api.Models.MaintenanceRequest", b =>
                 {
                     b.HasOne("FixFlow.Api.Models.Asset", "Asset")
@@ -1398,32 +1015,6 @@ namespace FixFlow.Api.Migrations
                     b.Navigation("User");
                 });
 
-<<<<<<< HEAD
-            modelBuilder.Entity("FixFlow.Api.Models.ScheduleProposal", b =>
-                {
-                    b.HasOne("FixFlow.Api.Models.MaintenanceRequest", "Request")
-                        .WithMany()
-                        .HasForeignKey("RequestId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("FixFlow.Api.Models.Technician", "Technician")
-                        .WithMany()
-                        .HasForeignKey("TechnicianId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("FixFlow.Api.Models.WorkOrder", "WorkOrder")
-                        .WithMany("Proposals")
-                        .HasForeignKey("WorkOrderId")
-                        .OnDelete(DeleteBehavior.Cascade);
-
-                    b.Navigation("Request");
-
-                    b.Navigation("Technician");
-
-                    b.Navigation("WorkOrder");
-=======
             modelBuilder.Entity("FixFlow.Api.Models.PriorityAssessment", b =>
                 {
                     b.HasOne("FixFlow.Api.Models.MaintenanceRequest", null)
@@ -1449,7 +1040,6 @@ namespace FixFlow.Api.Migrations
                     b.Navigation("MaintenanceRequest");
 
                     b.Navigation("OverriddenByUser");
->>>>>>> main
                 });
 
             modelBuilder.Entity("FixFlow.Api.Models.Technician", b =>
@@ -1472,76 +1062,6 @@ namespace FixFlow.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("Role");
-                });
-
-            modelBuilder.Entity("FixFlow.Api.Models.WorkNote", b =>
-                {
-                    b.HasOne("FixFlow.Api.Models.User", "Author")
-                        .WithMany()
-                        .HasForeignKey("AuthorId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("FixFlow.Api.Models.WorkOrder", "WorkOrder")
-                        .WithMany("Notes")
-                        .HasForeignKey("WorkOrderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Author");
-
-                    b.Navigation("WorkOrder");
-                });
-
-            modelBuilder.Entity("FixFlow.Api.Models.WorkOrder", b =>
-                {
-                    b.HasOne("FixFlow.Api.Models.User", "ApprovedBy")
-                        .WithMany()
-                        .HasForeignKey("ApprovedById")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("FixFlow.Api.Models.Location", "Location")
-                        .WithMany()
-                        .HasForeignKey("LocationId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("FixFlow.Api.Models.MaintenanceRequest", "Request")
-                        .WithMany()
-                        .HasForeignKey("RequestId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("FixFlow.Api.Models.Technician", "Technician")
-                        .WithMany()
-                        .HasForeignKey("TechnicianId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("ApprovedBy");
-
-                    b.Navigation("Location");
-
-                    b.Navigation("Request");
-
-                    b.Navigation("Technician");
-                });
-
-            modelBuilder.Entity("FixFlow.Api.Models.WorkOrderStatusHistory", b =>
-                {
-                    b.HasOne("FixFlow.Api.Models.User", "ChangedBy")
-                        .WithMany()
-                        .HasForeignKey("ChangedById")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("FixFlow.Api.Models.WorkOrder", "WorkOrder")
-                        .WithMany("StatusHistories")
-                        .HasForeignKey("WorkOrderId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ChangedBy");
-
-                    b.Navigation("WorkOrder");
                 });
 
             modelBuilder.Entity("SkillTechnician", b =>
@@ -1610,19 +1130,6 @@ namespace FixFlow.Api.Migrations
                     b.Navigation("Notifications");
                 });
 
-<<<<<<< HEAD
-            modelBuilder.Entity("FixFlow.Api.Models.WorkOrder", b =>
-                {
-                    b.Navigation("Evidence");
-
-                    b.Navigation("Notes");
-
-                    b.Navigation("Proposals");
-
-                    b.Navigation("StatusHistories");
-                });
-=======
->>>>>>> main
 #pragma warning restore 612, 618
         }
     }

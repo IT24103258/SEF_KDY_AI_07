@@ -1,7 +1,4 @@
-<<<<<<< HEAD
-=======
 using System.Security.Claims;
->>>>>>> main
 using FixFlow.Api.DTOs;
 using FixFlow.Api.Interfaces;
 using Microsoft.AspNetCore.Authorization;
@@ -9,25 +6,6 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace FixFlow.Api.Controllers;
 
-<<<<<<< HEAD
-[ApiController]
-[Route("api/[controller]")]
-[Authorize]
-public class RequestsController : ControllerBase
-{
-    private readonly IWorkOrderService _workOrderService;
-
-    public RequestsController(IWorkOrderService workOrderService)
-    {
-        _workOrderService = workOrderService;
-    }
-
-    [HttpGet]
-    public async Task<ActionResult<ApiResponse<List<MaintenanceRequestSummaryDto>>>> GetRequests()
-    {
-        var requests = await _workOrderService.GetAvailableRequestsAsync();
-        return Ok(ApiResponse<List<MaintenanceRequestSummaryDto>>.SuccessResult(requests));
-=======
 /// <summary>
 /// Component 1 — Request Intake &amp; Classification.
 /// Route prefix: /api/requests  (NOT /api/maintenance-requests).
@@ -209,6 +187,5 @@ public class IssueCategoriesController : ControllerBase
     {
         var categories = await _requestService.GetCategoriesAsync();
         return Ok(ApiResponse<List<IssueCategoryDto>>.SuccessResult(categories));
->>>>>>> main
     }
 }

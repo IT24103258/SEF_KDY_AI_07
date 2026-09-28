@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-<<<<<<< HEAD
+
 import '../core/theme/app_colors.dart';
 
 class PriorityBadge extends StatelessWidget {
@@ -18,7 +18,7 @@ class PriorityBadge extends StatelessWidget {
         color: bgColor,
         borderRadius: BorderRadius.circular(6),
         border: Border.all(color: color.withOpacity(0.3), width: 1),
-=======
+
 
 class PriorityBadgeWidget extends StatelessWidget {
   final String priority;
@@ -48,28 +48,27 @@ class PriorityBadgeWidget extends StatelessWidget {
         color: color.withOpacity( 0.15),
         border: Border.all(color: color.withOpacity( 0.4)),
         borderRadius: BorderRadius.circular(12),
->>>>>>> main
+
       ),
       child: Text(
         priority.toUpperCase(),
         style: TextStyle(
-<<<<<<< HEAD
+
           fontSize: 10,
           fontWeight: FontWeight.w700,
           color: color,
-=======
+
           color: color,
           fontSize: 11,
           fontWeight: FontWeight.bold,
->>>>>>> main
+
           letterSpacing: 0.5,
         ),
       ),
     );
   }
 }
-<<<<<<< HEAD
-=======
+
 
 class RiskLevelBadgeWidget extends StatelessWidget {
   final String riskLevel;
@@ -161,4 +160,4 @@ class SLAResponseCardWidget extends StatelessWidget {
     );
   }
 }
->>>>>>> main
+

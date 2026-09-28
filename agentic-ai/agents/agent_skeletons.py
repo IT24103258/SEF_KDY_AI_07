@@ -1,3 +1,5 @@
+import typing
+from schemas.workflow_schemas import StepExecutionResult
 """
 Component 2 Agent Skeletons.
 
@@ -42,7 +44,7 @@ class ClassificationAgent(BaseAgent):
         ]
         super().__init__("ClassificationAgent", tools)
 
-    def run_step(self, input_context: Dict[str, Any]) -> StepExecutionResult:
+    def run_step(self, input_context: typing.Dict[str, typing.Any]) -> StepExecutionResult:
         tool_log = self.execute_tool("get_issue_category_rules", category_name=input_context.get("title", ""))
 
         output = {
@@ -87,7 +89,7 @@ class PriorityAgent(BaseAgent):
     """
 
     # Authoritative level-to-points mapping (mirrors C# LevelToPoints)
-    _LEVEL_POINTS: Dict[str, int] = {
+    _LEVEL_POINTS: typing.Dict[str, int] = {
         "Critical": 4,
         "High": 3,
         "Medium": 2,
@@ -174,7 +176,7 @@ class PriorityAgent(BaseAgent):
     # run_step
     # -----------------------------------------------------------------------
 
-    def run_step(self, input_context: Dict[str, Any]) -> StepExecutionResult:
+    def run_step(self, input_context: typing.Dict[str, typing.Any]) -> StepExecutionResult:
         tool_logs = []
 
         # Extract Component 1 raw facts
@@ -619,19 +621,18 @@ class PriorityAgent(BaseAgent):
             tool_calls=tool_logs
         )
 
-<<<<<<< HEAD
+
 import requests
-from typing import Dict, Any
-=======
+import typing
     # -----------------------------------------------------------------------
     # Safe-failure helper
     # -----------------------------------------------------------------------
 
-    def _safe_failure(
+def _safe_failure(
         self,
         tool_logs: list,
         reason: str,
-        input_context: Dict[str, Any]
+        input_context: typing.Dict[str, typing.Any]
     ) -> StepExecutionResult:
         """
         Returns a FAILED step requiring human review.
@@ -656,11 +657,11 @@ from typing import Dict, Any
             tool_calls=tool_logs
         )
 
->>>>>>> main
 
-class AssignmentAgent(BaseAgent):
-    def __init__(self):
-        tools = [ALLOW_LISTED_TOOLS["get_technician_skills"]]
+
+        class AssignmentAgent(BaseAgent):
+          def __init__(self):
+           tools = [ALLOW_LISTED_TOOLS["get_technician_skills"]]
         super().__init__("AssignmentAgent", tools)
         
         # Mock techniques to test scoring logic for a C# API while offline.
@@ -670,9 +671,8 @@ class AssignmentAgent(BaseAgent):
             {"id": "TECH-103", "name": "Saman Kumara", "skills": ["Electrical Maintenance"], "status": "Active", "distanceKm": 0.8, "workload": 0},
         ]
 
-    def run_step(self, input_context: Dict[str, Any]) -> StepExecutionResult:
-        tool_log = self.execute_tool("get_technician_skills", technician_id="TECH-001")
-<<<<<<< HEAD
+        def run_step(self, input_context: typing.Dict[str, typing.Any]) -> StepExecutionResult:
+           tool_log = self.execute_tool("get_technician_skills", technician_id="TECH-001")
         
         request_id = str(input_context.get("request_id", "REQ-001"))
         required_skill = input_context.get("required_skill", "Electrical")
@@ -736,8 +736,7 @@ class AssignmentAgent(BaseAgent):
         # Selecting the person with the high score as the 'Top Match'
         candidates.sort(key=lambda x: x["match_score"], reverse=True)
         top_match_id = candidates[0]["technician_id"] if candidates else "TECH-001"
-=======
->>>>>>> main
+
 
         output = {
             "request_id": request_id,
@@ -806,7 +805,7 @@ def _build_scheduling_user_prompt(description: str, reference_date: Optional[str
     )
 
 
-def _interpret_scheduling_intent(description: str, reference_date: Optional[str] = None) -> Dict[str, Any]:
+def _interpret_scheduling_intent(description: str, reference_date: Optional[str] = None) -> typing.Dict[str, typing.Any]:
     from llm.ollama_client import OllamaClient
     from schemas.scheduling_intent import SchedulingIntent
 
@@ -816,7 +815,7 @@ def _interpret_scheduling_intent(description: str, reference_date: Optional[str]
     return result
 
 
-def _default_intent() -> Dict[str, Any]:
+def _default_intent() -> typing.Dict[str, typing.Any]:
     return {
         "preference_type": "flexible",
         "preferred_start": None,
@@ -841,10 +840,10 @@ def _build_scheduling_context(
     end_time: str,
     sla_deadline: str,
     is_tech_available: bool,
-    cal_res: Dict[str, Any],
-    bh_res: Dict[str, Any],
+    cal_res: typing.Dict[str, typing.Any],
+    bh_res: typing.Dict[str, typing.Any],
     existing_bookings: list,
-    intent: Optional[Dict[str, Any]],
+    intent: Optional[typing.Dict[str, typing.Any]],
 ):
     from scheduling.slot_planner import SchedulingContext, parse_iso_to_aware
 
@@ -899,7 +898,7 @@ class SchedulingAgent(BaseAgent):
         ]
         super().__init__("SchedulingAgent", tools)
 
-    def run_step(self, input_context: Dict[str, Any]) -> StepExecutionResult:
+    def run_step(self, input_context: typing.Dict[str, typing.Any]) -> StepExecutionResult:
         req_id = input_context.get("request_id", "REQ-001")
         tech_id = input_context.get("assigned_technician_id") or input_context.get("technician_id", "TECH-001")
         priority = input_context.get("priority") or input_context.get("priority_level", "Medium")
