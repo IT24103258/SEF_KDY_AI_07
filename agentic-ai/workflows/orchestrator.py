@@ -1,11 +1,12 @@
 import uuid
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from schemas.workflow_schemas import WorkflowExecutionRequest, WorkflowExecutionResult, StepExecutionResult
 from agents.agent_skeletons import ClassificationAgent, PriorityAgent, AssignmentAgent, SchedulingAgent
 
+app = FastAPI()
 router = APIRouter()
 
 '''
@@ -79,7 +80,6 @@ def test_assignment_agent_only(request: StandaloneAssignmentRequest):
 # ============================================================
 # MAIN MULTI-AGENT WORKFLOW ORCHESTRATOR
 # ============================================================
-@app.post("/api/orchestrator/execute", response_model=WorkflowExecutionResult)
 
 # ---------------------------------------------------------------------------
 # Shared, auditable planning metadata. The orchestrator always executes the
@@ -175,3 +175,5 @@ def execute_workflow(request: WorkflowExecutionRequest):
         requires_human_approval=requires_approval,
         approval_reason=approval_reason
     )
+
+app.include_router(router)

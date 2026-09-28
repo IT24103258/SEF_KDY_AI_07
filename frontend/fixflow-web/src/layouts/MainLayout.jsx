@@ -78,6 +78,9 @@ const navItems = [
     label: 'Technician Matching',
     path: '/assignments',
     icon: UserCheck,
+    roles: ADMIN_ROLES
+  },
+  {
     label: 'Request Queue',
     path: '/request-queue',
     icon: ClipboardList,
