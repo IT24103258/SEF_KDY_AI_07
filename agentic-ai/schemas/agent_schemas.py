@@ -14,12 +14,20 @@ class PriorityOutput(BaseModel):
     impact_level: str = "Medium"
     likelihood_level: str = "Medium"
     risk_score: int = Field(..., ge=1, le=100)
-    risk_level: str # Low, Medium, High, Critical
-    priority: str # Low, Medium, High, Critical
+    risk_level: str  # Low, Medium, High, Critical
+    priority: str    # Low, Medium, High, Critical
     recommended_response_window: str = "Within 4 hours"
     sla: Dict[str, Any] = Field(default_factory=dict)
     escalation_flag: bool = False
     explanation: str = ""
+    # Human-approval workflow (Component 2 downstream signal for Component 4)
+    human_approval_required: Optional[bool] = False
+    approval_reason: Optional[str] = None
+    # Component 2 derived decision flags
+    hazard_detected: Optional[bool] = False
+    # Deterministic contributing factors (mirrors C# ContributingFactorsDto) so the
+    # ASP.NET layer can re-verify the score before persisting.
+    contributing_factors: Optional[Dict[str, Any]] = None
     # Backward compatibility fields
     priority_level: Optional[str] = None
     target_sla_hours: Optional[int] = None

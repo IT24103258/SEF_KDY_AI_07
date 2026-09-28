@@ -402,6 +402,29 @@ button {
 .ff-input-has-icon { padding-left: 40px; }
 .ff-input-error { border-color: var(--danger-color); }
 
+/* Ensure select elements and their dropdown options render with dark background in dark mode */
+select.ff-input {
+  cursor: pointer;
+  appearance: auto;
+}
+
+:root[data-theme='dark'] select.ff-input,
+:root[data-theme='dark'] select.ff-input option {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+:root[data-theme='dark'] select.ff-input option:checked {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+}
+
+:root[data-theme='light'] select.ff-input,
+:root[data-theme='light'] select.ff-input option {
+  background-color: #ffffff;
+  color: var(--text-primary);
+}
+
 .ff-error-text { color: var(--danger-color); font-size: 0.8rem; }
 
 .ff-card {

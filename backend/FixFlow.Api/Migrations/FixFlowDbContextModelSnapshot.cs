@@ -257,6 +257,56 @@ namespace FixFlow.Api.Migrations
                     b.ToTable("Assets");
                 });
 
+            modelBuilder.Entity("FixFlow.Api.Models.Assignment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime>("AssignedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("MaintenanceRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("MatchScore")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("ReasoningSummary")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("RequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("Recommended");
+
+                    b.Property<Guid>("TechnicianId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MaintenanceRequestId");
+
+                    b.HasIndex("TechnicianId");
+
+                    b.ToTable("Assignments", (string)null);
+                });
+
             modelBuilder.Entity("FixFlow.Api.Models.AuditLog", b =>
                 {
                     b.Property<Guid>("Id")
@@ -572,6 +622,152 @@ namespace FixFlow.Api.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("Notifications");
+                });
+
+            // Member 2 - Risk & Priority
+            modelBuilder.Entity("FixFlow.Api.Models.PriorityAssessment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AssessedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("AssetCriticality")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("ContributingFactorsJson")
+                        .IsRequired()
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("EscalationFlag")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("EscalationReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("Explanation")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("ImpactLevel")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LikelihoodLevel")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("Priority")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("RecommendedResponseWindow")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<Guid>("RequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ResolutionTimeHours")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ResponseTimeHours")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RiskLevel")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<int>("RiskScore")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestId");
+
+                    b.ToTable("PriorityAssessment");
+                });
+
+            // Member 1 - Request Classification
+            modelBuilder.Entity("FixFlow.Api.Models.RequestClassification", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("ConfidenceScore")
+                        .HasColumnType("decimal(4,3)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsDeleted")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsOverride")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("MaintenanceRequestId")
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("OverriddenByUserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Reason")
+                        .HasColumnType("text");
+
+                    b.Property<string>("RequiredSkill")
+                        .HasColumnType("text");
+
+                    b.Property<bool>("RequiresReview")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Subcategory")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MaintenanceRequestId");
+
+                    b.HasIndex("OverriddenByUserId");
+
+                    b.ToTable("RequestClassification");
                 });
 
             modelBuilder.Entity("FixFlow.Api.Models.Role", b =>
@@ -1112,6 +1308,23 @@ namespace FixFlow.Api.Migrations
                     b.Navigation("Location");
                 });
 
+            modelBuilder.Entity("FixFlow.Api.Models.Assignment", b =>
+                {
+                    b.HasOne("FixFlow.Api.Models.MaintenanceRequest", "MaintenanceRequest")
+                        .WithMany()
+                        .HasForeignKey("MaintenanceRequestId");
+
+                    b.HasOne("FixFlow.Api.Models.Technician", "Technician")
+                        .WithMany("Assignments")
+                        .HasForeignKey("TechnicianId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("MaintenanceRequest");
+
+                    b.Navigation("Technician");
+                });
+
             modelBuilder.Entity("FixFlow.Api.Models.AuditLog", b =>
                 {
                     b.HasOne("FixFlow.Api.Models.User", "User")
@@ -1185,6 +1398,7 @@ namespace FixFlow.Api.Migrations
                     b.Navigation("User");
                 });
 
+<<<<<<< HEAD
             modelBuilder.Entity("FixFlow.Api.Models.ScheduleProposal", b =>
                 {
                     b.HasOne("FixFlow.Api.Models.MaintenanceRequest", "Request")
@@ -1209,6 +1423,33 @@ namespace FixFlow.Api.Migrations
                     b.Navigation("Technician");
 
                     b.Navigation("WorkOrder");
+=======
+            modelBuilder.Entity("FixFlow.Api.Models.PriorityAssessment", b =>
+                {
+                    b.HasOne("FixFlow.Api.Models.MaintenanceRequest", null)
+                        .WithMany()
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("FixFlow.Api.Models.RequestClassification", b =>
+                {
+                    b.HasOne("FixFlow.Api.Models.MaintenanceRequest", "MaintenanceRequest")
+                        .WithMany()
+                        .HasForeignKey("MaintenanceRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FixFlow.Api.Models.User", "OverriddenByUser")
+                        .WithMany()
+                        .HasForeignKey("OverriddenByUserId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("MaintenanceRequest");
+
+                    b.Navigation("OverriddenByUser");
+>>>>>>> main
                 });
 
             modelBuilder.Entity("FixFlow.Api.Models.Technician", b =>
@@ -1357,6 +1598,11 @@ namespace FixFlow.Api.Migrations
                     b.Navigation("Users");
                 });
 
+            modelBuilder.Entity("FixFlow.Api.Models.Technician", b =>
+                {
+                    b.Navigation("Assignments");
+                });
+
             modelBuilder.Entity("FixFlow.Api.Models.User", b =>
                 {
                     b.Navigation("MaintenanceRequests");
@@ -1364,6 +1610,7 @@ namespace FixFlow.Api.Migrations
                     b.Navigation("Notifications");
                 });
 
+<<<<<<< HEAD
             modelBuilder.Entity("FixFlow.Api.Models.WorkOrder", b =>
                 {
                     b.Navigation("Evidence");
@@ -1374,6 +1621,8 @@ namespace FixFlow.Api.Migrations
 
                     b.Navigation("StatusHistories");
                 });
+=======
+>>>>>>> main
 #pragma warning restore 612, 618
         }
     }

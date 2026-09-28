@@ -37,51 +37,36 @@ class ApiClient {
     return _handleResponse(response);
   }
 
-  Future<Map<String, dynamic>> uploadMultipart(
-    String endpoint, {
-    required List<int> fileBytes,
-    required String filename,
-    String fieldName = 'file',
-  }) async {
+  Future<Map<String, dynamic>> put(String endpoint, Map<String, dynamic> body) async {
     final token = await _storage.getToken();
-    final request = http.MultipartRequest(
-      'POST',
+    final response = await _client.put(
       Uri.parse('${ApiConstants.baseUrl}$endpoint'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode(body),
     );
+    return _handleResponse(response);
+  }
 
-    if (token != null) {
-      request.headers['Authorization'] = 'Bearer $token';
-    }
-
-    final multipartFile = http.MultipartFile.fromBytes(
-      fieldName,
-      fileBytes,
-      filename: filename,
+  
+  Future<Map<String, dynamic>> delete(String endpoint) async {
+    final token = await _storage.getToken();
+    final response = await _client.delete(
+      Uri.parse('${ApiConstants.baseUrl}$endpoint'),
+      headers: {
+        'Content-Type': 'application/json',
+        if (token != null) 'Authorization': 'Bearer $token',
+      },
     );
-    request.files.add(multipartFile);
-
-    final streamedResponse = await _client.send(request);
-    final response = await http.Response.fromStream(streamedResponse);
     return _handleResponse(response);
   }
 
   Map<String, dynamic> _handleResponse(http.Response response) {
-    if (response.body.isEmpty) {
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return {'success': true};
-      }
-      throw AppException('Request failed with status: ${response.statusCode}', response.statusCode);
-    }
-
-    try {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return data;
-      }
-      throw AppException(data['message'] ?? 'An error occurred', response.statusCode);
-    } catch (e) {
-      if (e is AppException) rethrow;
-      throw AppException('Failed to parse server response', response.statusCode);
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    if (response.statusCode >= 200 && response.statusCode < 300) {
+      return data;
     }
   }
 }
