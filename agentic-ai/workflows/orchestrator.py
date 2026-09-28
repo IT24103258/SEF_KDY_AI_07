@@ -1,11 +1,8 @@
 import uuid
-<<<<<<< HEAD
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-=======
 from fastapi import APIRouter, HTTPException
->>>>>>> main
 from schemas.workflow_schemas import WorkflowExecutionRequest, WorkflowExecutionResult, StepExecutionResult
 from agents.agent_skeletons import ClassificationAgent, PriorityAgent, AssignmentAgent, SchedulingAgent
 
@@ -51,7 +48,6 @@ class StandaloneAssignmentRequest(BaseModel):
 def health_check():
     return {"status": "healthy", "service": "FixFlow Agentic AI Orchestrator"}
 
-<<<<<<< HEAD
 @app.post("/agent/assign")
 def direct_assign(request: DirectAssignRequest):
     return {
@@ -84,7 +80,6 @@ def test_assignment_agent_only(request: StandaloneAssignmentRequest):
 # MAIN MULTI-AGENT WORKFLOW ORCHESTRATOR
 # ============================================================
 @app.post("/api/orchestrator/execute", response_model=WorkflowExecutionResult)
-=======
 
 # ---------------------------------------------------------------------------
 # Shared, auditable planning metadata. The orchestrator always executes the
@@ -107,16 +102,12 @@ _OBJECTIVES = {
 }
 
 @router.post("/api/orchestrator/execute", response_model=WorkflowExecutionResult)
->>>>>>> main
 def execute_workflow(request: WorkflowExecutionRequest):
     workflow_id = str(uuid.uuid4())
     steps = []
     requires_approval = False
     approval_reason = None
 
-<<<<<<< HEAD
-    # Member 1 — Request Intake & Classification Agent Step
-=======
     # ============================================================
     # SHARED — Objective & structured plan (auditable).
     # Additive metadata: every workflow declares its objective and the
@@ -129,7 +120,6 @@ def execute_workflow(request: WorkflowExecutionRequest):
     # ============================================================
     # MEMBER 1 — REQUEST INTAKE & CLASSIFICATION AGENT STEP
     # ============================================================
->>>>>>> main
     classification_agent = ClassificationAgent()
     step1_result = classification_agent.run_step(request.input_context)
     steps.append(step1_result)
