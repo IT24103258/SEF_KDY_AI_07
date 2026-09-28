@@ -1,9 +1,21 @@
 import 'package:flutter/material.dart';
+
 import '../../screens/login_screen.dart';
 import '../../screens/home_screen.dart';
 import '../../screens/profile_screen.dart';
 import '../../screens/notifications_screen.dart';
 import '../../screens/technician_jobs_screen.dart';
+
+// ── MEMBER 1 ─────────────────────────────────────────────────────────────────
+import '../../screens/requests/submit_request_screen.dart';
+import '../../screens/requests/edit_request_screen.dart';
+import '../../screens/requests/my_requests_screen.dart';
+import '../../screens/requests/request_detail_screen.dart';
+
+// ── MEMBER 2 ─────────────────────────────────────────────────────────────────
+import '../../screens/priority_details_screen.dart';
+import '../../screens/risk_matrix_screen.dart';
+import '../../screens/risk_simulator_screen.dart';
 
 /*
 ================================================================================
@@ -27,13 +39,18 @@ class AppRouter {
   // ============================================================
   // MEMBER 1 ROUTE CONSTANTS — REQUEST INTAKE & CLASSIFICATION
   // ============================================================
-  // Example: static const String requestIntake = '/request-intake';
+  static const String submitRequest = '/submit-request';
+  static const String editRequest   = '/edit-request';
+  static const String myRequests    = '/my-requests';
+  static const String requestDetail = '/request-detail';
 
 
   // ============================================================
   // MEMBER 2 ROUTE CONSTANTS — RISK & PRIORITY ASSESSMENT
   // ============================================================
-  // Example: static const String priorityDetails = '/priority-details';
+  static const String priorityDetails = '/priority-details';
+  static const String riskMatrix = '/risk-matrix';
+  static const String riskSimulator = '/risk-simulator';
 
 
   // ============================================================
@@ -63,15 +80,41 @@ class AppRouter {
       // ============================================================
       // MEMBER 1 ROUTE CASES — REQUEST INTAKE & CLASSIFICATION
       // ============================================================
-      // case requestIntake:
-      //   return MaterialPageRoute(builder: (_) => const RequestIntakeScreen());
-
+      case submitRequest:
+        return MaterialPageRoute(
+            builder: (_) => const SubmitRequestScreen());
+      case editRequest:
+        return MaterialPageRoute(
+            settings: settings,
+            builder: (_) => const EditRequestScreen());
+      case myRequests:
+        return MaterialPageRoute(
+            builder: (_) => const MyRequestsScreen());
+      case requestDetail:
+        return MaterialPageRoute(
+            settings: settings,
+            builder: (_) => const RequestDetailScreen());
 
       // ============================================================
       // MEMBER 2 ROUTE CASES — RISK & PRIORITY ASSESSMENT
       // ============================================================
-      // case priorityDetails:
-      //   return MaterialPageRoute(builder: (_) => const PriorityDetailsScreen());
+      case priorityDetails:
+        return MaterialPageRoute(builder: (_) => const PriorityDetailsScreen());
+
+      case riskMatrix:
+        return MaterialPageRoute(builder: (_) => const RiskMatrixScreen());
+
+      case riskSimulator:
+        final args = settings.arguments as Map<String, dynamic>? ?? {};
+        return MaterialPageRoute(
+          builder: (_) => RiskSimulatorScreen(
+            requestId: args['requestId'] ?? '',
+            requestNumber: args['requestNumber'] ?? '',
+            initialCriticality: args['assetCriticality'],
+            initialImpact: args['impactLevel'],
+            initialLikelihood: args['likelihoodLevel'],
+          ),
+        );
 
 
       // ============================================================

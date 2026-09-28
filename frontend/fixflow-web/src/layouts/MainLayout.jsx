@@ -15,7 +15,8 @@ import {
   Moon,
   LogOut,
   Menu,
-  X
+  X,
+  ShieldAlert
 } from 'lucide-react';
 
 import { useAuth } from '../hooks';
@@ -56,6 +57,12 @@ const navItems = [
     roles: ADMIN_ROLES
   },
   {
+    label: 'Risk & Priority',
+    path: '/priorities',
+    icon: ShieldAlert,
+    roles: ADMIN_ROLES
+  },
+  {
     label: 'Approvals',
     path: '/approvals',
     icon: CheckSquare,
@@ -68,9 +75,15 @@ const navItems = [
     roles: ADMIN_ROLES
   },
   {
+<<<<<<< HEAD
     label: 'Technician Matching',
     path: '/assignments',
     icon: UserCheck,
+=======
+    label: 'Request Queue',
+    path: '/request-queue',
+    icon: ClipboardList,
+>>>>>>> main
     roles: ADMIN_ROLES
   },
   {

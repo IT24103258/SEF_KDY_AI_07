@@ -119,16 +119,24 @@ builder.Services.AddSwaggerGen(c =>
 
 // ============================================================
 // MEMBER 1 — REQUEST INTAKE & CLASSIFICATION
-// ADD YOUR DI REGISTRATIONS ONLY IN THIS SECTION
 // ============================================================
-// Example: builder.Services.AddScoped<IIssueClassificationService, IssueClassificationService>();
+builder.Services.AddScoped<IRequestService, RequestService>();
+builder.Services.AddHttpClient<IClassificationAgentService, ClassificationAgentService>();
 
 
 // ============================================================
 // MEMBER 2 — RISK & PRIORITY ASSESSMENT
 // ADD YOUR DI REGISTRATIONS ONLY IN THIS SECTION
 // ============================================================
-// Example: builder.Services.AddScoped<IPriorityAssessmentService, PriorityAssessmentService>();
+builder.Services.AddScoped<IPriorityAssessmentService, PriorityAssessmentService>();
+builder.Services.AddHttpClient<IPriorityAgentService, PriorityAgentService>((serviceProvider, client) =>
+{
+    var configuration = serviceProvider.GetRequiredService<IConfiguration>();
+    var baseUrl = configuration["AgenticAI:BaseUrl"] ?? "http://localhost:8000";
+    var timeoutSeconds = configuration.GetValue<int?>("AgenticAI:TimeoutSeconds") ?? 30;
+    client.BaseAddress = new Uri(baseUrl);
+    client.Timeout = TimeSpan.FromSeconds(timeoutSeconds);
+});
 
 
 // ============================================================

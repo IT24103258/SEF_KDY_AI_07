@@ -7,4 +7,10 @@ class ApiConstants {
   static const String locations = '/locations';
   static const String assets = '/assets';
   static const String notifications = '/notifications';
+
+  // ── MEMBER 1 — Request Intake & Classification ──────────────────────────
+  static const String requests          = '/requests';
+  static const String myRequests        = '/requests/me';
+  static const String issueCategories   = '/issue-categories';
+  // Detail, classify & override use the id at runtime: '/requests/$id', etc.
 }
