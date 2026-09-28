@@ -42,11 +42,7 @@ class HomeScreen extends StatelessWidget {
                   'Welcome, ${authProvider.user?.firstName ?? 'Technician'}!',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-<<<<<<< HEAD
                 subtitle: Text('Role: ${authProvider.user?.role ?? 'Technician'}'),
-=======
-                subtitle: Text('Role: $role'),
->>>>>>> main
               ),
             ),
             const SizedBox(height: 20),
@@ -118,8 +114,6 @@ class HomeScreen extends StatelessWidget {
       ),
     );
   }
-<<<<<<< HEAD
-=======
 }
 
 class _QuickAction extends StatelessWidget {
@@ -140,5 +134,4 @@ class _QuickAction extends StatelessWidget {
       ),
     );
   }
->>>>>>> main
 }

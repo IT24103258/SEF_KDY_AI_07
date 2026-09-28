@@ -29,10 +29,7 @@ import {
   RequestDetailPage
 } from '../pages/Pages';
 
-<<<<<<< HEAD
 import TechnicianAssignment from '../pages/TechnicianAssignment';
-=======
->>>>>>> main
 
 import { getHomePath } from '../utils/roleRoutes';
 import { PriorityDashboard } from '../pages/PriorityDashboard';
