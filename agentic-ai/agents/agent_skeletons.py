@@ -29,6 +29,7 @@ from tools.domain_tools import ALLOW_LISTED_TOOLS
 from schemas.agent_schemas import ClassificationOutput, PriorityOutput, AssignmentOutput, ScheduleProposal
 from schemas.workflow_schemas import StepExecutionResult
 from validators.deterministic_validator import DeterministicValidator
+from classification.classifier import classify_request
 from typing import Dict, Any
 import re
 
@@ -45,12 +46,8 @@ class ClassificationAgent(BaseAgent):
     def run_step(self, input_context: Dict[str, Any]) -> StepExecutionResult:
         tool_log = self.execute_tool("get_issue_category_rules", category_name=input_context.get("title", ""))
 
-        output = {
-            "category": "HVAC",
-            "subcategory": "Lobby AC Cooling Failure",
-            "confidence_score": 0.92,
-            "requires_review": False
-        }
+        classify_result = classify_request(input_context.get("title") or "", input_context.get("description") or "")
+        output = classify_result.model_dump()
 
         is_valid, parsed, err = DeterministicValidator.validate_schema(output, ClassificationOutput)
         requires_human, approval_reason = DeterministicValidator.check_human_approval_required(self.name, output)
