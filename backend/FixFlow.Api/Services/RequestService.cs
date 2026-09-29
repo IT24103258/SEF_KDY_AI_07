@@ -311,6 +311,22 @@ return MapClassificationToDto(classification, null);
 
         await _context.SaveChangesAsync();
 
+        // Run Component 2 after a manual classification override
+        try
+        {
+           await _priorityAgent.EvaluateAndPersistAsync(
+              id,
+              null,
+              "PriorityAgent");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+               ex,
+                "PriorityAgent workflow failed after manual classification override for request {RequestId}.",
+               id);
+        }
+
         var manager = await _context.Users.FindAsync(managerId);
         return MapClassificationToDto(overrideRow, manager);
     }
