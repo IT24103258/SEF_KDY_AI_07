@@ -9,6 +9,7 @@ class ClassificationResult {
   final bool requiresReview;
   final String? requiredSkill;
   final String? reason;
+  final String? detectedAsset;
   final bool isOverride;
   final String? overriddenByUserName;
   final DateTime createdAt;
@@ -21,6 +22,7 @@ class ClassificationResult {
     required this.requiresReview,
     this.requiredSkill,
     this.reason,
+    this.detectedAsset,
     required this.isOverride,
     this.overriddenByUserName,
     required this.createdAt,
@@ -35,8 +37,33 @@ class ClassificationResult {
       requiresReview: json['requiresReview'] as bool? ?? false,
       requiredSkill: json['requiredSkill'] as String?,
       reason: json['reason'] as String?,
+      detectedAsset: json['detectedAsset'] as String?,
       isOverride: json['isOverride'] as bool? ?? false,
       overriddenByUserName: json['overriddenByUserName'] as String?,
+      createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
+    );
+  }
+}
+
+/// Photo attached to a request — matches AttachmentDto (Cloudinary SecureUrl).
+class RequestAttachment {
+  final String id;
+  final String secureUrl;
+  final String fileName;
+  final DateTime createdAt;
+
+  const RequestAttachment({
+    required this.id,
+    required this.secureUrl,
+    required this.fileName,
+    required this.createdAt,
+  });
+
+  factory RequestAttachment.fromJson(Map<String, dynamic> json) {
+    return RequestAttachment(
+      id: json['id'] ?? '',
+      secureUrl: json['secureUrl'] ?? '',
+      fileName: json['fileName'] ?? '',
       createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
     );
   }
@@ -100,6 +127,7 @@ class RequestDetail {
   final DateTime createdAt;
   final DateTime? updatedAt;
   final List<ClassificationResult> classifications;
+  final List<RequestAttachment> attachments;
 
   const RequestDetail({
     required this.id,
@@ -118,10 +146,12 @@ class RequestDetail {
     required this.createdAt,
     this.updatedAt,
     required this.classifications,
+    this.attachments = const [],
   });
 
   factory RequestDetail.fromJson(Map<String, dynamic> json) {
     final classJson = json['classifications'] as List<dynamic>? ?? [];
+    final attachJson = json['attachments'] as List<dynamic>? ?? [];
     return RequestDetail(
       id: json['id'] ?? '',
       requestNumber: json['requestNumber'] ?? '',
@@ -142,6 +172,9 @@ class RequestDetail {
           : null,
       classifications: classJson
           .map((e) => ClassificationResult.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      attachments: attachJson
+          .map((e) => RequestAttachment.fromJson(e as Map<String, dynamic>))
           .toList(),
     );
   }

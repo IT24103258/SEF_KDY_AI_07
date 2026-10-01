@@ -26,11 +26,16 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
   String? _selectedLocationId;
   String? _selectedBuilding;
   String? _selectedFloor;
+  String? _selectedAssetId;
   // String? _selectedCategoryId; --- IGNORE --- as this is now AI-determined and not set by the user
 
   Uint8List? _pickedImageBytes;
+  String? _pickedImageName;
 
   bool _submitted = false;
+
+  // Backend RequestService.UploadAttachmentAsync rejects files above 5 MB.
+  static const int _maxImageBytes = 5 * 1024 * 1024;
 
   @override
   void initState() {
@@ -42,11 +47,31 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
   }
 
   Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      final bytes = await pickedFile.readAsBytes();
-      setState(() => _pickedImageBytes = bytes);
+    try {
+      final picker = ImagePicker();
+      final pickedFile =
+          await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+      if (pickedFile != null) {
+        final bytes = await pickedFile.readAsBytes();
+        if (bytes.length > _maxImageBytes) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content:
+                    Text('Photo is too large. Maximum size is 5 MB.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+        setState(() {
+          _pickedImageBytes = bytes;
+          _pickedImageName = pickedFile.name;
+        });
+      }
+    } catch (_) {
+      // Picker cancelled or gallery unavailable — keep the previous selection.
     }
   }
 
@@ -61,20 +86,45 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final provider = context.read<RequestProvider>();
-    final success  = await provider.createRequest(
+    final newRequestId = await provider.createRequest(
       title:       _titleCtrl.text.trim(),
       description: _descCtrl.text.trim(),
       locationId:  _selectedLocationId!,
+      assetId:     _selectedAssetId,
     );
 
     if (!mounted) return;
 
-    if (success) {
+    if (newRequestId != null) {
+      // Upload runs AFTER the request exists, so a photo failure never
+      // discards the created request — it is surfaced separately below.
+      bool uploadOk = true;
+      if (_pickedImageBytes != null) {
+        uploadOk = await provider.uploadAttachment(
+          newRequestId,
+          _pickedImageBytes!,
+          _pickedImageName ?? 'photo.jpg',
+        );
+      }
+
+      String? uploadError;
+      if (!uploadOk) {
+        uploadError = provider.error;
+        provider.clearError();
+      }
+
+      if (!mounted) return;
       setState(() => _submitted = true);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Request submitted successfully!'),
-          backgroundColor: Colors.green,
+        SnackBar(
+          content: Text(uploadOk
+              ? 'Request submitted successfully!'
+              : 'Request submitted, but the photo could not be uploaded. '
+                  '${uploadError ?? 'Please try attaching it again later.'}'),
+          backgroundColor: uploadOk ? Colors.green : Colors.orange,
+          duration: uploadOk
+              ? const Duration(seconds: 2)
+              : const Duration(seconds: 5),
         ),
       );
       await Future.delayed(const Duration(milliseconds: 800));
@@ -86,6 +136,7 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
   Widget build(BuildContext context) {
     final provider   = context.watch<RequestProvider>();
     final locations  = provider.locations;
+    final assets     = provider.assets;
     final isLoading  = provider.isLoading;
 
     final buildings = locations.map((l) => l.building).where((b) => b.isNotEmpty).toSet().toList()
@@ -230,8 +281,24 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
                     : (v) => setState(() => _selectedLocationId = v),
                 validator: (v) => v == null || v.isEmpty ? 'Please select a room.' : null,
               ),
-              const SizedBox(height: 12),
+                            const SizedBox(height: 12),
 
+              // ── What is affected (optional) ───────────────────────────────
+              DropdownButtonFormField<String>(
+                initialValue: _selectedAssetId,
+                decoration: const InputDecoration(
+                  labelText: 'What is affected? (optional)',
+                  border:    OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.build_circle_outlined),
+                ),
+                items: [
+                  const DropdownMenuItem(value: '', child: Text('— Not sure / general area —')),
+                  ...assets.map((a) => DropdownMenuItem(value: a.id, child: Text(a.name))),
+                ],
+                onChanged: isLoading || _submitted
+                    ? null
+                    : (v) => setState(() => _selectedAssetId = (v?.isEmpty ?? true) ? null : v),
+              ),
               const SizedBox(height: 12),
 
               // ── Image Picker (optional) ───────────────────────────────────
@@ -249,13 +316,16 @@ class _SubmitRequestScreenState extends State<SubmitRequestScreen> {
                 icon: const Icon(Icons.camera_alt),
                 label: Text(_pickedImageBytes == null ? 'Attach Photo' : 'Change Photo'),
               ),
-              const Padding(
-                padding: EdgeInsets.only(top: 4, bottom: 24),
-                child: Text(
-                  'Note: Cloudinary upload implementation is a follow-up.',
-                  style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey),
+              if (_pickedImageName != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    _pickedImageName!,
+                    style: const TextStyle(
+                        fontSize: 12, fontStyle: FontStyle.italic, color: Colors.grey),
+                  ),
                 ),
-              ),
+              const SizedBox(height: 24),
 
               // ── Submit button ─────────────────────────────────────────────
               SizedBox(

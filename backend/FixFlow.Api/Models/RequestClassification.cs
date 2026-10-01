@@ -34,6 +34,9 @@ public class RequestClassification : BaseEntity
     /// <summary>Skill the classifier thinks is needed (e.g. "Residential Plumbing &amp; Drainage Repair").</summary>
     public string? RequiredSkill { get; set; }
 
+    /// <summary>Asset the classifier detected from the request text (e.g. "Air Conditioner"). Null when none detected.</summary>
+    public string? DetectedAsset { get; set; }
+
     /// <summary>Human-readable explanation of why this category was chosen.</summary>
     public string? Reason { get; set; }
 

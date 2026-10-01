@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/network/api_client.dart';
 import '../models/request_model.dart';
+import 'dart:typed_data';
 
 /// State + API layer for Component 1 — Request Intake & Classification.
 ///
@@ -39,19 +40,23 @@ class RequestProvider with ChangeNotifier {
   // ── Dropdown data (loaded once per screen open) ───────────────────────────
   List<DropdownOption> _locations   = [];
   List<DropdownOption> _categories  = [];
+  List<DropdownOption> _assets      = [];
 
   List<DropdownOption> get locations  => _locations;
   List<DropdownOption> get categories => _categories;
+  List<DropdownOption> get assets     => _assets;
 
   Future<void> loadDropdowns() async {
     try {
       final results = await Future.wait([
         _api.get('/locations'),
         _api.get('/issue-categories'),
+        _api.get('/assets'),
       ]);
 
       final locData  = results[0];
       final catData  = results[1];
+      final assetData = results[2];
 
       _locations = ((locData['data'] as List?) ?? [])
           .map((e) => DropdownOption(
@@ -66,6 +71,10 @@ class RequestProvider with ChangeNotifier {
       _categories = ((catData['data'] as List?) ?? [])
           .map((e) => DropdownOption(id: e['id'] ?? '', name: e['name'] ?? ''))
           .toList();
+
+      _assets = ((assetData['data'] as List?) ?? [])
+        .map((e) => DropdownOption(id: e['id'] ?? '', name: e['name'] ?? ''))
+        .toList();
 
       notifyListeners();
     } catch (_) {
@@ -121,6 +130,59 @@ class RequestProvider with ChangeNotifier {
     }
   }
 
+  // ── Request queue — all requests (Manager/Admin only) ────────────────────
+  // Mirrors React's RequestQueuePage: GET /api/requests.
+  List<RequestSummary> _allRequests = [];
+  int _queueTotal      = 0;
+  int _queueTotalPages = 1;
+
+  List<RequestSummary> get allRequests  => _allRequests;
+  int get queueTotal      => _queueTotal;
+  int get queueTotalPages => _queueTotalPages;
+
+  Future<void> fetchAllRequests({
+    int page = 1,
+    int pageSize = 20,
+    String? search,
+    String? status,
+    String? category,
+    String sortBy = 'CreatedAt',
+    bool sortDesc = true,
+  }) async {
+    _setLoading(true);
+    _setError(null);
+
+    try {
+      final params = <String, String>{
+        'page':     page.toString(),
+        'pageSize': pageSize.toString(),
+        'sortBy':   sortBy,
+        'sortDesc': sortDesc.toString(),
+        if (search != null && search.isNotEmpty)   'search':   search,
+        if (status != null && status.isNotEmpty)   'status':   status,
+        if (category != null && category.isNotEmpty) 'category': category,
+      };
+
+      final uri = Uri(
+        path: '/requests',
+        queryParameters: params,
+      ).toString();
+
+      final res = await _api.get(uri);
+      final data = res['data'] as Map<String, dynamic>? ?? {};
+
+      _allRequests = ((data['items'] as List?) ?? [])
+          .map((e) => RequestSummary.fromJson(e as Map<String, dynamic>))
+          .toList();
+      _queueTotal      = (data['totalCount'] as int?) ?? 0;
+      _queueTotalPages = (data['totalPages'] as int?) ?? 1;
+    } catch (e) {
+      _setError(e.toString().replaceFirst('AppException: ', ''));
+    } finally {
+      _setLoading(false);
+    }
+  }
+
   // ── Request detail ────────────────────────────────────────────────────────
   RequestDetail? _detail;
   RequestDetail? get detail => _detail;
@@ -140,28 +202,38 @@ class RequestProvider with ChangeNotifier {
   }
 
   // ── Create request ────────────────────────────────────────────────────────
-  Future<bool> createRequest({
+  Future<String?> createRequest({
     required String title,
     required String description,
     required String locationId,
-    String? categoryId,
+    String? assetId,
   }) async {
     _setLoading(true);
     _setError(null);
     try {
-      await _api.post('/requests', {
+      final res = await _api.post('/requests', {
         'title':       title,
         'description': description,
         'locationId':  locationId,
-        if (categoryId != null && categoryId.isNotEmpty)
-          'categoryId': categoryId,
+        if (assetId != null && assetId.isNotEmpty) 'assetId': assetId,
       });
+      final data = res['data'] as Map<String, dynamic>?;
+      return data?['id'] as String?;
+    } catch (e) {
+      _setError(e.toString().replaceFirst('AppException: ', ''));
+      return null;
+    } finally {
+      _setLoading(false);
+    }
+  }
+
+  Future<bool> uploadAttachment(String requestId, Uint8List bytes, String fileName) async {
+    try {
+      await _api.uploadFile('/requests/$requestId/attachments', bytes, fileName);
       return true;
     } catch (e) {
       _setError(e.toString().replaceFirst('AppException: ', ''));
       return false;
-    } finally {
-      _setLoading(false);
     }
   }
 

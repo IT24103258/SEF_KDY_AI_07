@@ -21,6 +21,9 @@ public class RequestClassificationConfiguration : IEntityTypeConfiguration<Reque
                .IsRequired()
                .HasMaxLength(100);
 
+        builder.Property(rc => rc.DetectedAsset)
+               .HasMaxLength(200);
+
         // ── ConfidenceScore stored as decimal(4,3):
         //    precision=4 means 4 significant digits total,
         //    scale=3 means 3 digits after the decimal point.

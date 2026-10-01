@@ -265,6 +265,56 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                     const SizedBox(height: 4),
                     Text(req.description,
                         style: const TextStyle(fontSize: 14, height: 1.5)),
+                    if (req.attachments.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      const Text('Attached Photos',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600, color: Colors.grey,
+                              fontSize: 12)),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        height: 130,
+                        child: ListView.separated(
+                          scrollDirection: Axis.horizontal,
+                          itemCount: req.attachments.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(width: 8),
+                          itemBuilder: (context, i) {
+                            final att = req.attachments[i];
+                            return ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                att.secureUrl,
+                                width: 170,
+                                height: 130,
+                                fit: BoxFit.cover,
+                                loadingBuilder: (context, child, progress) =>
+                                    progress == null
+                                        ? child
+                                        : Container(
+                                            width: 170,
+                                            height: 130,
+                                            color: Colors.grey.shade200,
+                                            child: const Center(
+                                              child:
+                                                  CircularProgressIndicator(
+                                                      strokeWidth: 2),
+                                            ),
+                                          ),
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Container(
+                                  width: 170,
+                                  height: 130,
+                                  color: Colors.grey.shade200,
+                                  child: const Icon(Icons.broken_image,
+                                      color: Colors.grey),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -491,6 +541,8 @@ class _RequestDetailScreenState extends State<RequestDetailScreen> {
                 _chip('Review', c.requiresReview ? 'Yes' : 'No'),
                 if (c.requiredSkill != null)
                   _chip('Skill', c.requiredSkill!),
+                if (c.detectedAsset != null && c.detectedAsset!.isNotEmpty)
+                  _chip('Asset', c.detectedAsset!),
                 if (c.overriddenByUserName != null)
                   _chip('By', c.overriddenByUserName!),
               ]),

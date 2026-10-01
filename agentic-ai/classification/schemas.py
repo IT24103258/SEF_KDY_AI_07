@@ -35,5 +35,6 @@ class ClassifyResponse(BaseModel):
     subcategory: Optional[str] = None
     confidence_score: float = Field(..., ge=0.0, le=1.0)
     requires_review: bool
+    detected_asset: Optional[str] = None
     required_skill: Optional[str] = None
     reason: Optional[str] = None

@@ -49,6 +49,20 @@ CATEGORY_TO_SKILL: dict[str, Optional[str]] = {
     "Structural":     None,
 }
 
+# Maps seeded Asset.Name → keyword patterns that identify that specific asset.
+# Only fires on distinctive phrasing so a generic "elevator stuck" does NOT
+# claim Tower A's elevator. The backend re-validates against seeded assets.
+ASSET_RULES: list[tuple[str, str]] = [
+    ("Tower A Passenger Elevator",
+     r"passenger\s+elevator|tower\s+a\s+(passenger\s+)?(elevator|lift)"),
+    ("Tower B Lobby Air Conditioner",
+     r"lobby\s+(air\s*con|airconditioner|a/?c)|tower\s+b.*air\s*con"),
+    ("Main Water Booster Pump System",
+     r"(water\s+)?booster\s+pump|main\s+water\s+pump"),
+    ("Backup Diesel Generator",
+     r"diesel\s+generator|backup\s+generator"),
+]
+
 # Maps IssueCategory.Name → list of (keyword_pattern, weight) tuples.
 # Higher weight = stronger signal for that category.
 # Patterns are matched as whole words (surrounded by \b) to avoid
@@ -228,6 +242,7 @@ def classify_request(title: str, description: str) -> ClassifyResponse:
 
     subcategory = _get_subcategory(best_category, text)
     skill       = CATEGORY_TO_SKILL.get(best_category)
+    asset       = _get_detected_asset(text)
     reason      = _build_reason(best_category, confidence, requires_review)
 
     return ClassifyResponse(
@@ -235,6 +250,7 @@ def classify_request(title: str, description: str) -> ClassifyResponse:
         subcategory     = subcategory,
         confidence_score= round(confidence, 4),
         requires_review = requires_review,
+        detected_asset  = asset,
         required_skill  = skill,
         reason          = reason,
     )
@@ -295,6 +311,14 @@ def _get_subcategory(category: str, text: str) -> Optional[str]:
     for pattern, label in hints:
         if re.search(rf"\b{pattern}\b", text):
             return label
+    return None
+
+
+def _get_detected_asset(text: str) -> Optional[str]:
+    """Return the seeded asset whose distinctive keywords appear in the text, else None."""
+    for asset_name, pattern in ASSET_RULES:
+        if re.search(pattern, text):
+            return asset_name
     return None
 
 
