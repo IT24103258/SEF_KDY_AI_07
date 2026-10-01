@@ -31,13 +31,15 @@ public class RequestServiceTests : IDisposable
         _context = new FixFlowDbContext(options);
         _mockAgent = new Mock<IClassificationAgentService>();
         var mockLogger = new Mock<ILogger<RequestService>>();
-var mockPriorityAgent = new Mock<IPriorityAgentService>();
+        var mockPriorityAgent = new Mock<IPriorityAgentService>();
+        var mockFileStorage = new Mock<IFileStorageService>();
 
-_service = new RequestService(
-    _context,
-    _mockAgent.Object,
-    mockPriorityAgent.Object,
-    mockLogger.Object);
+        _service = new RequestService(
+            _context,
+            _mockAgent.Object,
+            mockPriorityAgent.Object,
+            mockFileStorage.Object,
+            mockLogger.Object);
     }
 
     public void Dispose()

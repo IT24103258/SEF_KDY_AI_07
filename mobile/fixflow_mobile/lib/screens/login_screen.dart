@@ -85,7 +85,12 @@ class _LoginScreenState extends State<LoginScreen> {
                             _passwordController.text,
                           );
                           if (success && context.mounted) {
-                            Navigator.pushReplacementNamed(context, AppRouter.home);
+                            // Land on the role's home screen (same as React)
+                            Navigator.pushReplacementNamed(
+                              context,
+                              AppRouter.homeRouteFor(
+                                  authProvider.user?.role),
+                            );
                           }
                         },
                   style: ElevatedButton.styleFrom(
@@ -96,6 +101,13 @@ class _LoginScreenState extends State<LoginScreen> {
                       ? const CircularProgressIndicator(color: Colors.white)
                       : const Text('Sign In'),
                 ),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: authProvider.isLoading
+                    ? null
+                    : () => Navigator.pushNamed(context, AppRouter.register),
+                child: const Text("Don't have an account? Create one"),
               ),
             ],
           ),

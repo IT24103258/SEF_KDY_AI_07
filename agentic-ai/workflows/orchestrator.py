@@ -149,7 +149,7 @@ def execute_workflow(request: WorkflowExecutionRequest):
     assignment_agent = AssignmentAgent()
     step3_result = assignment_agent.run_step({
         "request_id": request.request_id,
-        "required_skill": step1_result.output_data.get("category", "General"),
+        "required_skill": step1_result.output_data.get("required_skill", "General"),#previously was category, but now we are using required_skill for better matching
         "priority": step2_result.output_data.get("priority_level", "Normal")
     })
     steps.append(step3_result)

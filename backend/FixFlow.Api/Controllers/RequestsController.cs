@@ -158,6 +158,14 @@ public class RequestsController : ControllerBase
         return Ok(ApiResponse<ClassificationResultDto>.SuccessResult(
             result, "Classification override recorded successfully."));
     }
+
+    [HttpPost("{id:guid}/attachments")]
+    public async Task<ActionResult<ApiResponse<AttachmentDto>>> UploadAttachment(
+        Guid id, IFormFile file)
+    {
+        var result = await _requestService.UploadAttachmentAsync(id, file, GetCallerId());
+        return Ok(ApiResponse<AttachmentDto>.SuccessResult(result, "Photo uploaded successfully."));
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

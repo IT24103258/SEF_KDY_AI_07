@@ -89,8 +89,10 @@ builder.Services.AddScoped<IApprovalService, ApprovalService>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IReportsService, ReportsService>();
-builder.Services.AddScoped<IFileStorageService, LocalFileStorageService>();
 builder.Services.AddScoped<ITechnicianService, TechnicianService>();
+// Photo attachments are stored in Cloudinary (credentials come from
+// configuration — Cloudinary:CloudName/ApiKey/ApiSecret — never hardcoded).
+builder.Services.AddScoped<IFileStorageService, CloudinaryFileStorageService>();
 
 // Swagger / OpenAPI Configuration
 builder.Services.AddEndpointsApiExplorer();
