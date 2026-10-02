@@ -221,6 +221,10 @@ class _RouteGuardState extends State<_RouteGuard> {
     String? redirect;
     if (!auth.isAuthenticated) {
       redirect = AppRouter.login;
+    } else if (auth.user == null || auth.user?.role == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     } else if (widget.allowedRoles != null &&
         !widget.allowedRoles!.contains(auth.user!.role)) {
       redirect = AppRouter.homeRouteFor(auth.user!.role);
