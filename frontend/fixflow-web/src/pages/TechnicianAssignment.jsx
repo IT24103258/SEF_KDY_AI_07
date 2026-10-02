@@ -1,16 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { UserCheck, Sparkles, CheckCircle } from 'lucide-react';
-import { technicianApi } from '../services/api';
+import { api , technicianApi } from '../services/api';
 
 export default function TechnicianAssignment() {
   const [technicians, setTechnicians] = useState([]);
   const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
   
-  const [mockRequest] = useState({
-    requestId: 101,
-    requiredSkill: 'Plumbing',
-    priorityLevel: 'High'
+  const [requestData, setRequestData] = useState({
+    requestId: '',
+    requiredSkill: '',
+    priorityLevel: ''
   });
 
   const [recommendation, setRecommendation] = useState(null);
@@ -27,16 +27,64 @@ export default function TechnicianAssignment() {
     }
   };
 
+  const fetchLatestRequest = async () => {
+    try {
+      // Retrieving the basic data of the latest request and the required skill identified by the Classification Agent.
+      const requestsRes = await technicianApi.fetchRequests();
+      const requestsList = requestsRes.data?.items || requestsRes.data || [];
+      
+      if (requestsList.length > 0) {
+        const latestReq = requestsList[0];
+        const requestId = latestReq.id || latestReq.requestId;
+
+        // Category/Skill obtained from Classification
+        const dynamicSkill = latestReq.category || latestReq.requiredSkill || 'General';
+
+        // Obtaining the priority level relevant to this specific request from the Priority Agent (Risk & Priority Assessment).
+        let dynamicPriority = 'Normal';
+        try {
+          const assessmentRes = await api.get('/priority-assessments');
+          const assessmentsList = assessmentRes.data?.items || assessmentRes.data || [];
+          
+          const matchedAssessment = assessmentsList.find(
+            a => a.requestId === requestId || a.id === requestId
+          ) || assessmentsList[0];
+          
+          if (matchedAssessment) {
+            dynamicPriority = matchedAssessment.priority || matchedAssessment.riskLevel || 'Normal';
+          }
+        } catch (priorityErr) {
+          console.warn("Could not fetch dynamic priority assessment:", priorityErr);
+        }
+
+        // Dynamically incorporating the actual outputs of both agents into the State.
+        setRequestData({
+          requestId: requestId,
+          requiredSkill: dynamicSkill,
+          priorityLevel: dynamicPriority
+        });
+      }
+    } catch (err) {
+      console.error("Error fetching dynamic request data:", err);
+    }
+  };
+
   useEffect(() => {
     fetchTechnicians();
+    fetchLatestRequest();
   }, []);
 
   const handleGetRecommendation = async () => {
     setLoading(true);
     setAssignStatus('');
     try {
-      const res = await technicianApi.fetchRecommendation(mockRequest);
-      setRecommendation(res);
+      const res = await technicianApi.fetchRecommendation({
+        requestId: requestData.requestId,
+        requiredSkill: requestData.requiredSkill,
+        priorityLevel: requestData.priorityLevel
+      });
+      // Passing only the `.data` from the Axios response to the state.
+      setRecommendation(res.data || res);
     } catch (err) {
       console.error("Error connecting via Gateway:", err);
       alert("Error: Make sure C# / Python backends are running.");
@@ -46,12 +94,28 @@ export default function TechnicianAssignment() {
   };
 
   const handleAssign = async () => {
-    if (!recommendation) return;
+    // Obtaining the correct Technician ID from the 'topCandidate' or recommendation.
+    const techId = 
+      recommendation?.recommendedTechnicianId || 
+      recommendation?.RecommendedTechnicianId || 
+      recommendation?.top_match_id || 
+      recommendation?.id ||
+      // Obtaining the correct Technician ID from the 'topCandidate' or recommendation.
+      technicians.find(t => (t.fullName || t.name) === displayTechnicianName)?.id;
+    
+    if (!techId) {
+      alert("Please select a valid technician before assigning!");
+      return;
+    }
+
     try {
-      const techId = recommendation.top_match_id || recommendation.recommendedTechnicianId;
-      const reqId = mockRequest.requestId;
-      
-      const res = await technicianApi.assignTechnician(reqId, techId);
+      await technicianApi.assignTechnician({
+        requestId: String(requestData.requestId), // Sending the GUID as a string
+        requiredSkill: String(requestData.requiredSkill),
+        priorityLevel: String(requestData.priorityLevel),
+        technicianId: techId
+      });
+
       setAssignStatus('Technician assigned successfully!');
     } catch (err) {
       console.error("Error assigning technician:", err);
@@ -59,12 +123,23 @@ export default function TechnicianAssignment() {
     }
   };
 
-  // Helper to extract top candidate details
-  const topCandidate = recommendation?.recommended_candidates?.[0] || recommendation;
+  // To securely handle various property formats coming from the backend
+  const topCandidate = recommendation?.recommended_candidates?.[0] || recommendation || {};
+  
+  const displayTechnicianName = 
+    topCandidate.technicianName || 
+    topCandidate.TechnicianName || 
+    topCandidate.technician_name || 
+    topCandidate.name || 
+    topCandidate.employeeCode || 
+    'N/A';
+
+  const displayMatchScore = topCandidate.matchScore || topCandidate.match_score || 0.85;
+  const displayReasoning = topCandidate.reasoningSummary || topCandidate.ReasoningSummary || topCandidate.reasoning || 'Best fit based on availability and skills.';
 
   return (
     <div style={{ padding: '30px', fontFamily: 'sans-serif', minHeight: '100vh' }}>
-      <h2>FixFlow AI - Manager Dashboard (Component 3)</h2>
+      <h2>FixFlow AI - Manager Dashboard </h2>
       <p style={{ color: '#666' }}>Technician Skill Matching & Intelligent Assignment Subsystem</p>
 
       {apiError && (
@@ -80,7 +155,7 @@ export default function TechnicianAssignment() {
           <h3><UserCheck size={20} /> Available Technicians</h3>
           <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: '10px' }}>
             <thead>
-              <tr style={{ background: '#eee', textAlign: 'left' }}>
+              <tr style={{ background: '#3d6187', textAlign: 'left' }}>
                 <th style={{ padding: '8px' }}>Code</th>
                 <th style={{ padding: '8px' }}>Name</th>
                 <th style={{ padding: '8px' }}>Skills</th>
@@ -115,14 +190,14 @@ export default function TechnicianAssignment() {
           <h3><Sparkles size={20} color="#6366f1" /> AI Technician Matching</h3>
           
           <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '6px', margin: '15px 0', color: '#333' }}>
-            <h4>Mock Maintenance Request (#101)</h4>
-            <p><strong>Required Skill:</strong> {mockRequest.requiredSkill}</p>
-            <p><strong>Priority:</strong> {mockRequest.priorityLevel}</p>
+            <h4>Maintenance Request (#{requestData.requestId || 'Loading...'})</h4>
+            <p><strong>Required Skill:</strong> {requestData.requiredSkill || 'Pending...'}</p>
+            <p><strong>Priority:</strong> {requestData.priorityLevel || 'Pending...'}</p>
           </div>
 
           <button 
             onClick={handleGetRecommendation}
-            disabled={loading}
+            disabled={loading || !requestData.requestId}
             style={{
               backgroundColor: '#6366f1', color: '#fff', border: 'none', padding: '10px 18px',
               borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold'
@@ -134,9 +209,9 @@ export default function TechnicianAssignment() {
           {recommendation && (
             <div style={{ marginTop: '20px', padding: '15px', border: '2px solid #6366f1', borderRadius: '8px', background: '#eef2ff', color: '#333' }}>
               <h4 style={{ margin: '0 0 10px 0', color: '#4338ca' }}>Recommended Candidate</h4>
-              <p><strong>Technician:</strong> {topCandidate.technicianName || topCandidate.name || topCandidate.technician_id}</p>
-              <p><strong>Match Confidence:</strong> {((topCandidate.matchScore || topCandidate.match_score || 0.85) * 100).toFixed(0)}%</p>
-              <p><strong>Reasoning:</strong> {topCandidate.reasoningSummary || topCandidate.reasoning || 'Best fit based on availability and skills.'}</p>
+              <p><strong>Technician:</strong> {displayTechnicianName}</p>
+              <p><strong>Match Confidence:</strong> {(displayMatchScore * 100).toFixed(0)}%</p>
+              <p><strong>Reasoning:</strong> {displayReasoning}</p>
 
               <button 
                 onClick={handleAssign}

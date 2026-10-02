@@ -78,7 +78,6 @@ class AppRouter {
   // ============================================================
   static const String technicianHome = '/technician-home';
 
-
   // ============================================================
   // MEMBER 4 ROUTE CONSTANTS — SCHEDULING & WORK ORDER MANAGEMENT
   // ============================================================

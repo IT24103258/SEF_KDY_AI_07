@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Mail, Lock, User, Phone, ShieldCheck } from 'lucide-react';
+import { Mail, Lock, User, Phone, ShieldCheck, Wrench } from 'lucide-react';
 import { useAuth } from '../hooks';
 import { Button, Input } from '../components/SharedUI';
 import { BrandMark } from '../components/BrandMark';
@@ -14,7 +14,8 @@ const initialForm = {
   phoneNumber: '',
   password: '',
   confirmPassword: '',
-  roleName: 'Requester' // Requester = customer/requester account
+  roleName: 'Requester', // Requester = customer/requester account
+  specialization: 'General' // For Technician skill
 };
 
 const validate = (form) => {
@@ -37,6 +38,11 @@ const validate = (form) => {
   }
 
   if (form.confirmPassword !== form.password) errors.confirmPassword = 'Passwords do not match';
+
+  // If you are a technician, skill is important.
+  if (form.roleName === 'Technician' && !form.specialization.trim()) {
+    errors.specialization = 'Specialization / Skill is required';
+  }
 
   return errors;
 };
@@ -72,7 +78,8 @@ export const Register = () => {
         email: form.email.trim(),
         phoneNumber: form.phoneNumber.trim(),
         password: form.password,
-        roleName: form.roleName
+        roleName: form.roleName,
+        specialization: form.roleName === 'Technician' ? form.specialization : undefined
       });
 
       // Auto sign-in right after registering, then land on the right page for the role.
@@ -113,6 +120,29 @@ export const Register = () => {
                 <option value="Technician">Technician — I carry out work orders</option>
               </select>
             </div>
+
+            {/* Skill/Specialization dropdown that appears only for a technician. */}
+            {form.roleName === 'Technician' && (
+              <div className="ff-field">
+                <label className="ff-label">Primary Skill / Specialization</label>
+                <div style={{ position: 'relative' }}>
+                  <select
+                    className="ff-input"
+                    value={form.specialization}
+                    onChange={handleChange('specialization')}
+                  >
+                    <option value="Common">Common Maintenance</option>
+                    <option value="Electrical">Electrical</option>
+                    <option value="Elevator/Lift">Elevator/Lift</option>
+                    <option value="HVAC">HVAC</option>
+                    <option value="Plumbing">Plumbing</option>
+                    <option value="Structural">Structural</option>
+                    <option value="Water Supply">Water Supply</option>
+                  </select>
+                </div>
+                {errors.specialization && <span style={{ color: 'var(--error, red)', fontSize: '0.8rem' }}>{errors.specialization}</span>}
+              </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               <Input
