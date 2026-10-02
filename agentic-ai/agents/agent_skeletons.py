@@ -294,6 +294,15 @@ class SchedulingAgent(BaseAgent):
                     llm_observability["llm_latency_ms"] = raw_intent.get("_ollama_latency_ms", 0)
                     llm_observability["interpretation_summary"] = raw_intent.get("interpretation_summary", "")
                     llm_observability["confidence"] = raw_intent.get("confidence", 0.5)
+                elif raw_intent.get("_ollama_disabled"):
+                    scheduling_intent = _default_intent()
+                    llm_observability["interpretation_summary"] = "LLM disabled by configuration (OLLAMA_ENABLED=false) — deterministic defaults used."
+                elif raw_intent.get("_ollama_circuit_open"):
+                    scheduling_intent = _default_intent()
+                    llm_observability["interpretation_summary"] = "LLM temporarily unavailable (circuit breaker open after repeated failures) — deterministic defaults used."
+                elif raw_intent.get("_ollama_busy"):
+                    scheduling_intent = _default_intent()
+                    llm_observability["interpretation_summary"] = "LLM busy with another request — deterministic defaults used."
                 else:
                     scheduling_intent = _default_intent()
                     llm_observability["interpretation_summary"] = "LLM fallback — using deterministic defaults."
@@ -438,6 +447,10 @@ class SchedulingAgent(BaseAgent):
             "decision_summary": decision_summary,
             "validation_required": True,
             "is_conflict_free": not conflict_detected,
+            # Explicit provenance: "llm_assisted" means the LLM only interpreted
+            # natural-language preferences — the schedule itself was always
+            # planned and validated by deterministic code, never trusted from the LLM.
+            "scheduling_path": "llm_assisted" if llm_observability["llm_used"] else "deterministic_fallback",
             "llm_used": llm_observability["llm_used"],
             "llm_fallback": llm_observability["llm_fallback"],
             "llm_interpretation_summary": llm_observability["interpretation_summary"],

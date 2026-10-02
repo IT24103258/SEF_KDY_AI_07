@@ -44,10 +44,12 @@ Install the following software before running the project:
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - [Node.js (v18+)](https://nodejs.org/)
-- [Flutter SDK (v3.19+)](https://flutter.dev/)
+- [Flutter SDK (v3.47.4 — Dart SDK v3.13.3)](https://flutter.dev/)
 - [Python (v3.10+)](https://www.python.org/)
 - [PostgreSQL](https://www.postgresql.org/)
 - [pgAdmin 4](https://www.pgadmin.org/)
+
+> Verified with `flutter --version`: Flutter 3.47.4 (stable channel), Dart 3.13.3, DevTools 2.60.0. The Flutter SDK version and the bundled Dart SDK version are separate — do not put a Flutter version into the `sdk:` constraint in `pubspec.yaml` (that field is the Dart SDK constraint).
 
 > **Note:** Docker is not required for this project. PostgreSQL is installed and managed locally using PostgreSQL and pgAdmin 4.
 
@@ -84,6 +86,13 @@ dotnet ef database update
 dotnet run
 ```
 API Swagger Documentation available at: `http://localhost:5000/swagger`
+
+**File storage (work order evidence photos & signatures):**
+- Uploaded evidence photos are stored on local disk under the path configured by `FileStorage:UploadDirectory` in `appsettings.json` (default `./uploads`); only the generated file key and metadata are stored in PostgreSQL.
+- The maximum upload size is controlled by `FileStorage:MaxSizeBytes` (default 10 MB). Only `.jpg`, `.jpeg`, `.png`, and `.webp` files are accepted.
+- The storage directory is local to the machine running the API — for production deployments, mount persistent storage and include it in backups, or files will be lost on redeploy/restart.
+- Evidence photos and signatures are only served through the authenticated endpoint `GET /api/work-orders/{id}/evidence/{evidenceId}/photo` to users authorized to view that work order. There are no public/static URLs for evidence files.
+- The drawn customer signature is captured as a small SVG **electronic image** (stored as a compact data URL in PostgreSQL by design). It records who signed on the device — it is not a cryptographically verified digital signature.
 
 ### 3. Frontend Web Application (React + Vite)
 ```bash

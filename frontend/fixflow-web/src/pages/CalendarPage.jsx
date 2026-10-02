@@ -168,9 +168,9 @@ export const CalendarPage = () => {
         }
       />
 
-      {/* Control Bar: Navigation & Filters */}
+      {/* Control Bar: Navigation & Filters — one horizontal row on desktop, wraps on narrow screens */}
       <Card style={{ marginBottom: '1.25rem', padding: '1rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
           {/* Navigation Controls */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Button variant="secondary" size="sm" onClick={handleToday}>
@@ -182,64 +182,76 @@ export const CalendarPage = () => {
             <Button variant="secondary" size="sm" onClick={handleNext} title="Next Week">
               Next Week <ChevronRight size={16} />
             </Button>
-            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.05rem', marginLeft: '8px' }}>
+            <span style={{ fontFamily: 'var(--font-display)', fontWeight: 700, fontSize: '1.05rem', marginLeft: '8px', whiteSpace: 'nowrap' }}>
               {formattedWeekRange}
             </span>
           </div>
 
-          {/* Filters */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-            {/* Search */}
-            <div className="ff-input-wrap" style={{ minWidth: '160px' }}>
-              <input
-                type="text"
+          {/* Search — flexible width */}
+          <div className="ff-input-wrap" style={{ flex: '1 1 200px', minWidth: '160px', maxWidth: '340px' }}>
+            <input
+              type="text"
+              className="ff-input"
+              placeholder="Search..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ padding: '6px 10px', fontSize: '0.82rem' }}
+            />
+          </div>
+
+          {/* Filters — the three dropdowns share one dedicated horizontal container so they
+              never split across lines; on narrow screens the group wraps as a unit and the
+              dropdowns stack internally. Fixed compact widths (shrink disabled) stop them
+              from stretching to 100% of the row. */}
+          <div
+            aria-label="Schedule filters"
+            style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '14px', flex: '0 1 auto', minWidth: 0, maxWidth: '100%' }}
+          >
+            <div className="ff-input-wrap" style={{ flex: '0 0 240px' }}>
+              <select
                 className="ff-input"
-                placeholder="Search..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                value={selectedTech}
+                onChange={(e) => setSelectedTech(e.target.value)}
                 style={{ padding: '6px 10px', fontSize: '0.82rem' }}
-              />
+              >
+                <option value="">All Technicians</option>
+                {technicians.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.firstName} {t.lastName}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <select
-              className="ff-input"
-              value={selectedTech}
-              onChange={(e) => setSelectedTech(e.target.value)}
-              style={{ minWidth: '150px', padding: '6px 10px', fontSize: '0.82rem' }}
-            >
-              <option value="">All Technicians</option>
-              {technicians.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.firstName} {t.lastName}
-                </option>
-              ))}
-            </select>
+            <div className="ff-input-wrap" style={{ flex: '0 0 165px' }}>
+              <select
+                className="ff-input"
+                value={selectedPriority}
+                onChange={(e) => setSelectedPriority(e.target.value)}
+                style={{ padding: '6px 10px', fontSize: '0.82rem' }}
+              >
+                <option value="">All Priorities</option>
+                <option value="Critical">Critical</option>
+                <option value="High">High</option>
+                <option value="Medium">Medium</option>
+                <option value="Low">Low</option>
+              </select>
+            </div>
 
-            <select
-              className="ff-input"
-              value={selectedPriority}
-              onChange={(e) => setSelectedPriority(e.target.value)}
-              style={{ minWidth: '120px', padding: '6px 10px', fontSize: '0.82rem' }}
-            >
-              <option value="">All Priorities</option>
-              <option value="Critical">Critical</option>
-              <option value="High">High</option>
-              <option value="Medium">Medium</option>
-              <option value="Low">Low</option>
-            </select>
-
-            <select
-              className="ff-input"
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              style={{ minWidth: '120px', padding: '6px 10px', fontSize: '0.82rem' }}
-            >
-              <option value="">All Statuses</option>
-              <option value="Scheduled">Scheduled</option>
-              <option value="InProgress">In Progress</option>
-              <option value="PendingManagerApproval">Pending</option>
-              <option value="Completed">Completed</option>
-            </select>
+            <div className="ff-input-wrap" style={{ flex: '0 0 185px' }}>
+              <select
+                className="ff-input"
+                value={selectedStatus}
+                onChange={(e) => setSelectedStatus(e.target.value)}
+                style={{ padding: '6px 10px', fontSize: '0.82rem' }}
+              >
+                <option value="">All Statuses</option>
+                <option value="Scheduled">Scheduled</option>
+                <option value="InProgress">In Progress</option>
+                <option value="PendingManagerApproval">Pending</option>
+                <option value="Completed">Completed</option>
+              </select>
+            </div>
           </div>
         </div>
 

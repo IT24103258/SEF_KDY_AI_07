@@ -19,6 +19,8 @@
 }
 
 :root[data-theme='light'] {
+  color-scheme: light;
+
   --bg-primary: #EEF2FA;
   --bg-secondary: #ffffff;
   --bg-card: rgba(255, 255, 255, 0.78);
@@ -51,6 +53,8 @@
 }
 
 :root[data-theme='dark'] {
+  color-scheme: dark;
+
   --bg-primary: #0A0F1C;
   --bg-secondary: #101828;
   --bg-card: rgba(22, 30, 48, 0.62);
@@ -401,6 +405,22 @@ button {
 .ff-input:focus { border-color: var(--primary-color); box-shadow: 0 0 0 3px var(--primary-light); }
 .ff-input-has-icon { padding-left: 40px; }
 .ff-input-error { border-color: var(--danger-color); }
+
+/* Native <select> dropdowns: color-scheme on :root renders the popup natively
+   themed per theme; explicit option colors cover browsers that ignore it. */
+select.ff-input {
+  appearance: auto;
+  cursor: pointer;
+}
+select.ff-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+select.ff-input option,
+select.ff-input optgroup {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
 
 .ff-error-text { color: var(--danger-color); font-size: 0.8rem; }
 

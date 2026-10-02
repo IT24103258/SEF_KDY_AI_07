@@ -443,8 +443,14 @@ export const WorkOrderDetailPage = () => {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
             {(() => {
               const vc = workOrder.validationChecklist;
+              // Backend stores ScheduleConflictNone = IsConflictFree (true = no conflict).
+              // Trust the checklist value when present; otherwise fall back to the
+              // work order's conflictDetected flag. Treat missing values safely.
+              const conflictFree = vc
+                ? (typeof vc.scheduleConflictNone === 'boolean' ? vc.scheduleConflictNone : !workOrder.conflictDetected)
+                : !workOrder.conflictDetected;
               const checks = [
-                { label: 'No Schedule Conflicts', passed: vc ? vc.scheduleConflictNone : !workOrder.conflictDetected },
+                { label: conflictFree ? 'No Schedule Conflicts' : 'Schedule Conflicts', passed: conflictFree },
                 { label: 'Within SLA Deadline', passed: vc ? vc.slaRequirementPassed : true },
                 { label: 'Technician Available', passed: vc ? vc.technicianAvailable : true },
                 { label: 'Operational Business Hours', passed: vc ? vc.businessHoursValid : true },

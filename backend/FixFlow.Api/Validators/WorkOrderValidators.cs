@@ -75,5 +75,10 @@ public class CompleteWorkOrderDtoValidator : AbstractValidator<CompleteWorkOrder
     {
         RuleFor(x => x.SignerName)
             .NotEmpty().WithMessage("Customer / Signer name is required for job sign-off.");
+
+        RuleFor(x => x.SignatureDataUrl)
+            .MaximumLength(100_000).WithMessage("Signature image data is too large.")
+            .Must(v => string.IsNullOrWhiteSpace(v) || v.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase))
+            .WithMessage("Signature must be an image data URL (data:image/...).");
     }
 }

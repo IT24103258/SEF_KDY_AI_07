@@ -170,8 +170,36 @@ public class WorkOrdersController : ControllerBase
         if (file == null || file.Length == 0)
             return BadRequest(ApiResponse<string>.FailureResult("No file provided."));
 
+        var extension = Path.GetExtension(file.FileName);
+        if (string.IsNullOrWhiteSpace(extension) || !AllowedImageExtensions.Contains(extension))
+            return BadRequest(ApiResponse<string>.FailureResult("Unsupported file type. Allowed types: .jpg, .jpeg, .png, .webp."));
+
+        await _workOrderService.EnsureEvidenceUploadAllowedAsync(id, GetCurrentUserId(), GetCurrentUserRole());
+
         using var stream = file.OpenReadStream();
         var fileKey = await _fileStorageService.UploadFileAsync(stream, file.FileName);
         return Ok(ApiResponse<string>.SuccessResult(fileKey, "Photo uploaded successfully."));
+    }
+
+    [HttpGet("{id}/evidence/{evidenceId}/photo")]
+    public async Task<IActionResult> GetEvidencePhoto(Guid id, Guid evidenceId)
+    {
+        var evidence = await _workOrderService.GetEvidenceFileAsync(id, evidenceId, GetCurrentUserId(), GetCurrentUserRole());
+        var stream = await _fileStorageService.GetFileAsync(evidence.FileKey);
+        return File(stream, GetImageContentType(evidence.FileKey));
+    }
+
+    private static readonly HashSet<string> AllowedImageExtensions = new(StringComparer.OrdinalIgnoreCase)
+    { ".jpg", ".jpeg", ".png", ".webp" };
+
+    private static string GetImageContentType(string fileKey)
+    {
+        return Path.GetExtension(fileKey).ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            _ => "application/octet-stream"
+        };
     }
 }

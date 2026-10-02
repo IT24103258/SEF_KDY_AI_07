@@ -32,6 +32,8 @@ public interface IWorkOrderService
     Task<List<WorkOrderSummaryDto>> GetTechnicianScheduleAsync(Guid technicianUserId, DateTime? filterDate = null);
     Task<List<MaintenanceRequestSummaryDto>> GetAvailableRequestsAsync();
     Task<List<TechnicianSummaryDto>> GetTechniciansAsync();
+    Task EnsureEvidenceUploadAllowedAsync(Guid workOrderId, Guid userId, string role);
+    Task<CompletionEvidenceDto> GetEvidenceFileAsync(Guid workOrderId, Guid evidenceId, Guid? currentUserId, string? currentUserRole);
 }
 
 public interface ISchedulingService

@@ -1161,4 +1161,50 @@ public class WorkOrderService : IWorkOrderService
             })
             .ToListAsync();
     }
+
+    public async Task EnsureEvidenceUploadAllowedAsync(Guid workOrderId, Guid userId, string role)
+    {
+        var w = await _context.Set<WorkOrder>()
+            .Include(x => x.Technician)
+            .FirstOrDefaultAsync(x => x.Id == workOrderId && !x.IsDeleted);
+
+        if (w == null)
+            throw new NotFoundException($"Work order with ID '{workOrderId}' was not found.");
+
+        // Endpoint is restricted to Administrator/Technician via route authorization;
+        // technicians may only upload evidence for work orders assigned to them.
+        if (role != "Administrator" && w.Technician?.UserId != userId)
+            throw new ForbiddenException("Only the assigned technician may upload evidence for this work order.");
+    }
+
+    public async Task<CompletionEvidenceDto> GetEvidenceFileAsync(Guid workOrderId, Guid evidenceId, Guid? currentUserId, string? currentUserRole)
+    {
+        var w = await _context.Set<WorkOrder>()
+            .Include(x => x.Request)
+            .Include(x => x.Technician)
+            .Include(x => x.Evidence)
+            .FirstOrDefaultAsync(x => x.Id == workOrderId && !x.IsDeleted);
+
+        if (w == null)
+            throw new NotFoundException($"Work order with ID '{workOrderId}' was not found.");
+
+        // Same scoping rules as GetWorkOrderByIdAsync, but with 403 semantics.
+        if (currentUserRole == "Technician" && currentUserId.HasValue && w.Technician?.UserId != currentUserId.Value)
+            throw new ForbiddenException("Technicians may only access work orders assigned to them.");
+
+        if (currentUserRole == "Requester" && currentUserId.HasValue && w.Request?.RequesterId != currentUserId.Value)
+            throw new ForbiddenException("Requesters may only view work orders for their own requests.");
+
+        var evidence = w.Evidence.FirstOrDefault(e => e.Id == evidenceId);
+        if (evidence == null || string.IsNullOrEmpty(evidence.FileKey))
+            throw new NotFoundException("Evidence record was not found for this work order.");
+
+        return new CompletionEvidenceDto
+        {
+            Id = evidence.Id,
+            WorkOrderId = evidence.WorkOrderId,
+            FileKey = evidence.FileKey,
+            OriginalFileName = evidence.OriginalFileName
+        };
+    }
 }

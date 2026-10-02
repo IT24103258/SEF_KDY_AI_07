@@ -297,10 +297,12 @@ public class AuditLogService : IAuditLogService
 public class LocalFileStorageService : IFileStorageService
 {
     private readonly string _uploadDirectory;
+    private readonly long? _maxSizeBytes;
 
     public LocalFileStorageService(IConfiguration configuration)
     {
         _uploadDirectory = configuration["FileStorage:UploadDirectory"] ?? "./uploads";
+        _maxSizeBytes = configuration.GetValue<long?>("FileStorage:MaxSizeBytes");
         if (!Directory.Exists(_uploadDirectory))
         {
             Directory.CreateDirectory(_uploadDirectory);
@@ -309,12 +311,30 @@ public class LocalFileStorageService : IFileStorageService
 
     public async Task<string> UploadFileAsync(Stream fileStream, string fileName)
     {
-        var uniqueFileName = $"{Guid.NewGuid()}_{fileName}";
+        // Never trust client-supplied file names: strip paths/invalid chars and store under a generated key.
+        var safeName = SanitizeFileName(fileName);
+        var uniqueFileName = $"{Guid.NewGuid()}{safeName}";
         var filePath = Path.Combine(_uploadDirectory, uniqueFileName);
 
-        using (var destinationStream = new FileStream(filePath, FileMode.Create))
+        try
         {
-            await fileStream.CopyToAsync(destinationStream);
+            using (var destinationStream = new FileStream(filePath, FileMode.Create))
+            {
+                if (_maxSizeBytes is long limit)
+                {
+                    await CopyWithLimitAsync(fileStream, destinationStream, limit);
+                }
+                else
+                {
+                    await fileStream.CopyToAsync(destinationStream);
+                }
+            }
+        }
+        catch
+        {
+            // Do not leave partial files behind when the size limit aborts the copy.
+            try { if (File.Exists(filePath)) File.Delete(filePath); } catch (IOException) { }
+            throw;
         }
 
         return uniqueFileName;
@@ -322,10 +342,53 @@ public class LocalFileStorageService : IFileStorageService
 
     public Task<Stream> GetFileAsync(string fileKey)
     {
-        var filePath = Path.Combine(_uploadDirectory, fileKey);
-        if (!File.Exists(filePath)) throw new NotFoundException("File not found.");
+        // Containment check so a crafted fileKey cannot escape the upload directory.
+        var fullUploadDir = Path.GetFullPath(_uploadDirectory);
+        var fileName = Path.GetFileName(fileKey);
+        var filePath = Path.GetFullPath(Path.Combine(fullUploadDir, fileName));
+        if (!filePath.StartsWith(fullUploadDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
+            || !File.Exists(filePath))
+        {
+            throw new NotFoundException("File not found.");
+        }
 
-        Stream stream = new FileStream(filePath, FileMode.Open, FileAccess.Read);
+        Stream stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
         return Task.FromResult(stream);
+    }
+
+    private static string SanitizeFileName(string fileName)
+    {
+        var name = Path.GetFileName(fileName ?? string.Empty).Trim();
+
+        var invalid = Path.GetInvalidFileNameChars();
+        var chars = name.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            if (Array.IndexOf(invalid, chars[i]) >= 0)
+                chars[i] = '_';
+        }
+        name = new string(chars);
+
+        if (string.IsNullOrWhiteSpace(name))
+            throw new ValidationException("File name is required.");
+
+        if (name.Length > 100)
+            name = name[^100..];
+
+        return name;
+    }
+
+    private static async Task CopyWithLimitAsync(Stream source, Stream destination, long maxBytes)
+    {
+        var buffer = new byte[81920];
+        long total = 0;
+        int read;
+        while ((read = await source.ReadAsync(buffer)) > 0)
+        {
+            total += read;
+            if (total > maxBytes)
+                throw new ValidationException($"File exceeds the maximum allowed size of {maxBytes} bytes.");
+            await destination.WriteAsync(buffer, 0, read);
+        }
     }
 }
