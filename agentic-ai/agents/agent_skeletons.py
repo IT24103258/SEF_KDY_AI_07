@@ -134,7 +134,7 @@ from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
-_IST = timezone(timedelta(hours=5, minutes=30))
+_IST = timezone(timedelta(hours=5, minutes=30))  # Asia/Colombo (Sri Lanka Standard Time)
 
 SCHEDULING_SYSTEM_PROMPT = (
     "You are a scheduling intent interpreter for a maintenance work order system.\n"
@@ -264,13 +264,42 @@ class SchedulingAgent(BaseAgent):
         super().__init__("SchedulingAgent", tools)
 
     def run_step(self, input_context: Dict[str, Any]) -> StepExecutionResult:
-        req_id = input_context.get("request_id", "REQ-001")
-        tech_id = input_context.get("assigned_technician_id") or input_context.get("technician_id", "TECH-001")
-        priority = input_context.get("priority") or input_context.get("priority_level", "Medium")
-        duration = input_context.get("estimated_duration_minutes", 120)
-        sla_deadline = input_context.get("sla_deadline", "2026-09-24T18:00:00Z")
-        start_time = input_context.get("preferred_start_time") or input_context.get("proposed_start_time") or input_context.get("proposed_start") or "2026-09-24T14:00:00Z"
-        end_time = input_context.get("preferred_end_time") or input_context.get("proposed_end_time") or input_context.get("proposed_end") or "2026-09-24T16:00:00Z"
+        req_id = input_context.get("request_id")
+        tech_id = input_context.get("assigned_technician_id") or input_context.get("technician_id")
+        priority = input_context.get("priority") or input_context.get("priority_level") or "Medium"
+        duration = input_context.get("estimated_duration_minutes")
+        sla_deadline = input_context.get("sla_deadline")
+        start_time = input_context.get("preferred_start_time") or input_context.get("proposed_start_time") or input_context.get("proposed_start")
+        end_time = input_context.get("preferred_end_time") or input_context.get("proposed_end_time") or input_context.get("proposed_end")
+
+        missing = []
+        if not req_id:
+            missing.append("request_id")
+        if not tech_id:
+            missing.append("assigned_technician_id or technician_id")
+        if not duration:
+            missing.append("estimated_duration_minutes")
+        if not sla_deadline:
+            missing.append("sla_deadline")
+        if not start_time:
+            missing.append("preferred_start_time or proposed_start_time")
+        if not end_time:
+            missing.append("preferred_end_time or proposed_end_time")
+
+        if missing:
+            error_output = {
+                "error": "MISSING_REQUIRED_INPUTS",
+                "missing_fields": missing,
+                "decision_summary": f"SchedulingAgent cannot proceed: missing required inputs: {', '.join(missing)}",
+            }
+            return StepExecutionResult(
+                agent_name=self.name,
+                step_name="Conflict-Free Work Order Scheduling",
+                status="FAILED",
+                output_data=error_output,
+                validation_passed=False,
+                tool_calls=[]
+            )
 
         llm_observability = {
             "llm_used": False,
@@ -324,7 +353,7 @@ class SchedulingAgent(BaseAgent):
         t2 = self.execute_tool(
             "GetBusinessHours",
             business_hours=input_context.get("business_hours"),
-            date=start_time[:10] if start_time else "2026-09-24"
+            date=start_time[:10] if start_time else datetime.now(tz=_IST).strftime("%Y-%m-%d")
         )
         tool_logs.append(t2)
 

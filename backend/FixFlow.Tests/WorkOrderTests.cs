@@ -106,7 +106,7 @@ public class WorkOrderTests
     }
 
     [Fact]
-    public async Task CreateConflictFreeWorkOrderAsync_ShouldProposeValidSlot_WhenNoConflictsExist()
+    public async Task CreateConflictFreeWorkOrderAsync_ShouldRequireApproval_WhenHighPriority()
     {
         using var context = CreateInMemoryDbContext();
         var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
@@ -139,21 +139,21 @@ public class WorkOrderTests
         Assert.True(proposal.WithinBusinessHours);
         Assert.True(proposal.WithinTechnicianAvailability);
         Assert.True(proposal.SlaCompliant);
-        Assert.Equal("Scheduled", proposal.ProposalStatus);
+        Assert.Equal("PendingManagerApproval", proposal.ProposalStatus);
         Assert.NotEmpty(proposal.DecisionSummary);
+        Assert.Contains("high", proposal.DecisionSummary, StringComparison.OrdinalIgnoreCase);
 
-        // Verify no misleading approval records were created for a conflict-free work order
         var savedWorkOrder = await ctx.Set<WorkOrder>().FirstOrDefaultAsync(w => w.Id == proposal.WorkOrderId);
         Assert.NotNull(savedWorkOrder);
-        Assert.Equal(WorkOrderStatus.Scheduled, savedWorkOrder.Status);
+        Assert.Equal(WorkOrderStatus.PendingManagerApproval, savedWorkOrder.Status);
         Assert.False(savedWorkOrder.ConflictDetected);
 
         var workflow = await ctx.AgentWorkflows
             .Include(w => w.ApprovalActions)
             .FirstOrDefaultAsync(w => w.RequestId == request.Id);
         Assert.NotNull(workflow);
-        Assert.Equal(WorkflowStatus.Completed, workflow.Status);
-        Assert.Empty(workflow.ApprovalActions);
+        Assert.Equal(WorkflowStatus.WaitingForApproval, workflow.Status);
+        Assert.NotEmpty(workflow.ApprovalActions);
     }
 
     [Fact]
@@ -802,5 +802,522 @@ public class WorkOrderTests
         var roundTripEnd = TimeZoneInfo.ConvertTimeFromUtc(result.ScheduledEndTime!.Value, FacilityTimeZone);
         Assert.Equal(startTimeLocal.TimeOfDay, roundTripStart.TimeOfDay);
         Assert.Equal(endTimeLocal.TimeOfDay, roundTripEnd.TimeOfDay);
+    }
+
+    // ============================================================
+    // PHASE 1 — Approval Policy Tests
+    // ============================================================
+
+    [Fact]
+    public async Task CreateConflictFreeWorkOrderAsync_ShouldScheduleDirectly_WhenMediumPriority()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+
+        var validBusinessSlot = GetNextWeekdayUtc().AddHours(10);
+        request.CreatedAt = validBusinessSlot.AddHours(-2);
+        await ctx.SaveChangesAsync();
+
+        var reqDto = new ScheduleRequestDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Priority = "Medium",
+            EstimatedDurationMinutes = 60,
+            PreferredStartTime = validBusinessSlot
+        };
+
+        var proposal = await schedService.CreateConflictFreeWorkOrderAsync(reqDto, requester.Id);
+
+        Assert.Equal("Scheduled", proposal.ProposalStatus);
+        Assert.False(proposal.ConflictDetected);
+
+        var savedWo = await ctx.Set<WorkOrder>().FirstOrDefaultAsync(w => w.Id == proposal.WorkOrderId);
+        Assert.Equal(WorkOrderStatus.Scheduled, savedWo!.Status);
+
+        var workflow = await ctx.AgentWorkflows
+            .Include(w => w.ApprovalActions)
+            .FirstOrDefaultAsync(w => w.RequestId == request.Id);
+        Assert.Equal(WorkflowStatus.Completed, workflow!.Status);
+        Assert.Empty(workflow.ApprovalActions);
+    }
+
+    [Fact]
+    public async Task CreateConflictFreeWorkOrderAsync_ShouldRequireApproval_WhenCriticalPriority()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+
+        var validBusinessSlot = GetNextWeekdayUtc().AddHours(10);
+        request.CreatedAt = validBusinessSlot.AddHours(-2);
+        await ctx.SaveChangesAsync();
+
+        var reqDto = new ScheduleRequestDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Priority = "Critical",
+            EstimatedDurationMinutes = 60,
+            PreferredStartTime = validBusinessSlot,
+            SlaDeadline = validBusinessSlot.AddDays(3)
+        };
+
+        var proposal = await schedService.CreateConflictFreeWorkOrderAsync(reqDto, requester.Id);
+
+        Assert.Equal("PendingManagerApproval", proposal.ProposalStatus);
+        Assert.False(proposal.ConflictDetected);
+        Assert.Contains("critical", proposal.DecisionSummary, StringComparison.OrdinalIgnoreCase);
+
+        var workflow = await ctx.AgentWorkflows
+            .Include(w => w.ApprovalActions)
+            .FirstOrDefaultAsync(w => w.RequestId == request.Id);
+        Assert.Equal(WorkflowStatus.WaitingForApproval, workflow!.Status);
+        Assert.NotEmpty(workflow.ApprovalActions);
+    }
+
+    [Fact]
+    public async Task CreateWorkOrderAsync_HighPriorityNoConflict_ShouldRequireApproval()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+        var woService = new WorkOrderService(ctx, schedService, mockAudit.Object, mockNotify.Object);
+
+        var targetDateLocal = GetNextWeekdayLocal();
+        var startTimeLocal = targetDateLocal.AddHours(10);
+        var endTimeLocal = targetDateLocal.AddHours(11);
+
+        var createDto = new WorkOrderCreateDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Title = "High Priority No Conflict",
+            Description = "High priority should require approval even without conflict",
+            Priority = "High",
+            ScheduledStartTime = startTimeLocal,
+            ScheduledEndTime = endTimeLocal,
+            EstimatedDurationMinutes = 60,
+            SLADeadline = targetDateLocal.AddDays(5)
+        };
+
+        var result = await woService.CreateWorkOrderAsync(createDto, manager.Id);
+
+        Assert.Equal("PendingManagerApproval", result.Status);
+        Assert.False(result.ConflictDetected);
+        Assert.Contains("high", result.AiDecisionSummary, StringComparison.OrdinalIgnoreCase);
+
+        var proposal = await ctx.Set<ScheduleProposal>()
+            .FirstOrDefaultAsync(p => p.WorkOrderId == result.Id);
+        Assert.NotNull(proposal);
+        Assert.False(proposal.ConflictDetected);
+        Assert.False(proposal.IsAccepted);
+
+        var workflow = await ctx.AgentWorkflows
+            .Include(w => w.ApprovalActions)
+            .FirstOrDefaultAsync(w => w.RequestId == request.Id);
+        Assert.NotNull(workflow);
+        Assert.Equal("WaitingForApproval", workflow.Status.ToString());
+        Assert.NotEmpty(workflow.ApprovalActions);
+    }
+
+    [Fact]
+    public async Task ApproveWorkOrderAsync_ShouldSetProposalIsAccepted()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+        var woService = new WorkOrderService(ctx, schedService, mockAudit.Object, mockNotify.Object);
+
+        var targetDate = GetNextWeekdayUtc();
+
+        var pendingWo = new WorkOrder
+        {
+            WorkOrderNumber = "WO-ACCEPT-001",
+            Title = "Pending Approval With Proposal",
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Status = WorkOrderStatus.PendingManagerApproval,
+            ScheduledStartTime = targetDate.AddHours(5),
+            ScheduledEndTime = targetDate.AddHours(7),
+            EstimatedDurationMinutes = 120
+        };
+        await ctx.Set<WorkOrder>().AddAsync(pendingWo);
+
+        var proposal = new ScheduleProposal
+        {
+            WorkOrderId = pendingWo.Id,
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            ProposedStartTime = pendingWo.ScheduledStartTime.Value,
+            ProposedEndTime = pendingWo.ScheduledEndTime.Value,
+            EstimatedDurationMinutes = 120,
+            Priority = WorkOrderPriority.High,
+            IsAccepted = false
+        };
+        await ctx.Set<ScheduleProposal>().AddAsync(proposal);
+        await ctx.SaveChangesAsync();
+
+        var decision = new WorkOrderApprovalDecisionDto
+        {
+            Approved = true,
+            Comments = "Approved by manager."
+        };
+
+        await woService.ApproveWorkOrderAsync(pendingWo.Id, decision, manager.Id);
+
+        var updatedProposal = await ctx.Set<ScheduleProposal>()
+            .FirstOrDefaultAsync(p => p.Id == proposal.Id);
+        Assert.True(updatedProposal!.IsAccepted);
+    }
+
+    [Fact]
+    public async Task RejectWorkOrderAsync_ShouldUpdateWorkflowAndProposalState()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+        var woService = new WorkOrderService(ctx, schedService, mockAudit.Object, mockNotify.Object);
+
+        var pendingWo = new WorkOrder
+        {
+            WorkOrderNumber = "WO-REJECT-WF-001",
+            Title = "Pending Rejection With Workflow",
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Status = WorkOrderStatus.PendingManagerApproval,
+            ScheduledStartTime = DateTime.UtcNow.AddDays(1).AddHours(5),
+            ScheduledEndTime = DateTime.UtcNow.AddDays(1).AddHours(7),
+            EstimatedDurationMinutes = 120
+        };
+        await ctx.Set<WorkOrder>().AddAsync(pendingWo);
+
+        var proposal = new ScheduleProposal
+        {
+            WorkOrderId = pendingWo.Id,
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            ProposedStartTime = pendingWo.ScheduledStartTime.Value,
+            ProposedEndTime = pendingWo.ScheduledEndTime.Value,
+            EstimatedDurationMinutes = 120,
+            Priority = WorkOrderPriority.High,
+            IsAccepted = false
+        };
+        await ctx.Set<ScheduleProposal>().AddAsync(proposal);
+
+        var workflow = new AgentWorkflow
+        {
+            RequestId = request.Id,
+            WorkflowType = "SchedulingPipeline",
+            Status = WorkflowStatus.WaitingForApproval
+        };
+        await ctx.AgentWorkflows.AddAsync(workflow);
+
+        var approvalAction = new ApprovalAction
+        {
+            WorkflowId = workflow.Id,
+            Status = ApprovalStatus.Pending,
+            ReasonRequired = "High priority requires approval.",
+            RequestedAt = DateTime.UtcNow
+        };
+        await ctx.ApprovalActions.AddAsync(approvalAction);
+        await ctx.SaveChangesAsync();
+
+        var decision = new WorkOrderApprovalDecisionDto
+        {
+            Approved = false,
+            Comments = "Technician lacks required certification."
+        };
+
+        var result = await woService.RejectWorkOrderAsync(pendingWo.Id, decision, manager.Id);
+
+        Assert.Equal("Rejected", result.Status);
+
+        var updatedWorkflow = await ctx.AgentWorkflows
+            .Include(w => w.ApprovalActions)
+            .FirstOrDefaultAsync(w => w.Id == workflow.Id);
+        Assert.Equal(WorkflowStatus.Rejected, updatedWorkflow!.Status);
+        Assert.All(updatedWorkflow.ApprovalActions, a => Assert.Equal(ApprovalStatus.Rejected, a.Status));
+
+        var updatedProposal = await ctx.Set<ScheduleProposal>()
+            .FirstOrDefaultAsync(p => p.Id == proposal.Id);
+        Assert.False(updatedProposal!.IsAccepted);
+    }
+
+    // ============================================================
+    // ISSUE C — Tool-Call Observability (actual DB data, not hardcoded)
+    // ============================================================
+
+    [Fact]
+    public async Task ToolCallLogs_ShouldContainActualActiveBookingsCount()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+
+        var targetDate = GetNextWeekdayUtc();
+
+        // Seed 3 existing active bookings for this technician
+        for (int i = 0; i < 3; i++)
+        {
+            await ctx.Set<WorkOrder>().AddAsync(new WorkOrder
+            {
+                WorkOrderNumber = $"WO-TOOLCALL-{i}",
+                Title = $"Existing Job {i}",
+                RequestId = request.Id,
+                TechnicianId = tech.Id,
+                Status = WorkOrderStatus.Scheduled,
+                ScheduledStartTime = targetDate.AddHours(8 + i * 3),
+                ScheduledEndTime = targetDate.AddHours(9 + i * 3),
+                EstimatedDurationMinutes = 60
+            });
+        }
+        await ctx.SaveChangesAsync();
+
+        var validSlot = targetDate.AddHours(20); // far enough to not conflict
+        request.CreatedAt = validSlot.AddHours(-2);
+        await ctx.SaveChangesAsync();
+
+        var reqDto = new ScheduleRequestDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Priority = "Low",
+            EstimatedDurationMinutes = 60,
+            PreferredStartTime = validSlot
+        };
+
+        await schedService.CreateConflictFreeWorkOrderAsync(reqDto, requester.Id);
+
+        var workflow = await ctx.AgentWorkflows
+            .Include(w => w.Steps)
+                .ThenInclude(s => s.ToolCalls)
+            .FirstOrDefaultAsync(w => w.RequestId == request.Id);
+
+        Assert.NotNull(workflow);
+        var step = workflow.Steps.First();
+        var calendarTool = step.ToolCalls.FirstOrDefault(t => t.ToolName == "GetTechnicianCalendar");
+        Assert.NotNull(calendarTool);
+
+        var output = System.Text.Json.JsonDocument.Parse(calendarTool.OutputJson);
+        var actualCount = output.RootElement.GetProperty("activeBookingsCount").GetInt32();
+        Assert.Equal(3, actualCount);
+    }
+
+    [Fact]
+    public async Task ToolCallLogs_ShouldContainActualBusinessHours()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+
+        var validSlot = GetNextWeekdayUtc().AddHours(10);
+        request.CreatedAt = validSlot.AddHours(-2);
+        await ctx.SaveChangesAsync();
+
+        var reqDto = new ScheduleRequestDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Priority = "Medium",
+            EstimatedDurationMinutes = 60,
+            PreferredStartTime = validSlot
+        };
+
+        await schedService.CreateConflictFreeWorkOrderAsync(reqDto, requester.Id);
+
+        var workflow = await ctx.AgentWorkflows
+            .Include(w => w.Steps)
+                .ThenInclude(s => s.ToolCalls)
+            .FirstOrDefaultAsync(w => w.RequestId == request.Id);
+
+        Assert.NotNull(workflow);
+        var step = workflow.Steps.First();
+
+        var bhTool = step.ToolCalls.FirstOrDefault(t => t.ToolName == "GetBusinessHours");
+        Assert.NotNull(bhTool);
+
+        var output = System.Text.Json.JsonDocument.Parse(bhTool.OutputJson);
+        var open = output.RootElement.GetProperty("open").GetString();
+        var close = output.RootElement.GetProperty("close").GetString();
+        var isWorkingDay = output.RootElement.GetProperty("isWorkingDay").GetBoolean();
+
+        Assert.Equal("08:00", open);
+        Assert.Equal("17:00", close);
+        Assert.True(isWorkingDay);
+    }
+
+    [Fact]
+    public async Task ToolCallLogs_ShouldHaveGenuineExecutionTimeMs_FromStopwatch()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+
+        var validSlot = GetNextWeekdayUtc().AddHours(10);
+        request.CreatedAt = validSlot.AddHours(-2);
+        await ctx.SaveChangesAsync();
+
+        var reqDto = new ScheduleRequestDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Priority = "Medium",
+            EstimatedDurationMinutes = 60,
+            PreferredStartTime = validSlot
+        };
+
+        await schedService.CreateConflictFreeWorkOrderAsync(reqDto, requester.Id);
+
+        var workflow = await ctx.AgentWorkflows
+            .Include(w => w.Steps)
+                .ThenInclude(s => s.ToolCalls)
+            .FirstOrDefaultAsync(w => w.RequestId == request.Id);
+
+        Assert.NotNull(workflow);
+        var step = workflow.Steps.First();
+        Assert.NotEmpty(step.ToolCalls);
+        Assert.All(step.ToolCalls, tc => Assert.True(tc.ExecutionTimeMs >= 0, $"ExecutionTimeMs should be non-negative but was {tc.ExecutionTimeMs}"));
+    }
+
+    // ============================================================
+    // WORK ORDER NUMBER — Concurrency-safe generation
+    // ============================================================
+
+    [Fact]
+    public async Task WorkOrderNumber_ShouldBeUnique_AcrossMultipleCreations()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+
+        var numbers = new List<string>();
+        for (int i = 0; i < 5; i++)
+        {
+            var newRequest = new MaintenanceRequest
+            {
+                RequestNumber = $"REQ-CONCURRENT-{i}",
+                Title = $"Concurrent Test {i}",
+                Description = "Testing unique WO numbers",
+                Status = RequestStatus.Matched,
+                LocationId = request.LocationId,
+                RequesterId = requester.Id,
+                CreatedAt = DateTime.UtcNow
+            };
+            await ctx.MaintenanceRequests.AddAsync(newRequest);
+            await ctx.SaveChangesAsync();
+
+            var validSlot = GetNextWeekdayUtc().AddHours(10 + i * 3);
+            newRequest.CreatedAt = validSlot.AddHours(-2);
+            await ctx.SaveChangesAsync();
+
+            var reqDto = new ScheduleRequestDto
+            {
+                RequestId = newRequest.Id,
+                TechnicianId = tech.Id,
+                Priority = "Low",
+                EstimatedDurationMinutes = 60,
+                PreferredStartTime = validSlot
+            };
+
+            var proposal = await schedService.CreateConflictFreeWorkOrderAsync(reqDto, requester.Id);
+            var wo = await ctx.Set<WorkOrder>().FirstOrDefaultAsync(w => w.Id == proposal.WorkOrderId);
+            numbers.Add(wo?.WorkOrderNumber ?? "");
+        }
+
+        var distinctNumbers = numbers.Distinct().ToList();
+        Assert.Equal(5, distinctNumbers.Count);
+    }
+
+    // ============================================================
+    // REPORTS — AverageSchedulingLeadTimeHours from actual data
+    // ============================================================
+
+    [Fact]
+    public async Task GetSchedulingReportsAsync_ShouldCalculateLeadTimeFromActualData()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+
+        var now = DateTime.UtcNow;
+
+        // Create work orders with known lead times
+        await ctx.Set<WorkOrder>().AddAsync(new WorkOrder
+        {
+            WorkOrderNumber = "WO-LEAD-001",
+            Title = "Lead Time Test 1",
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Status = WorkOrderStatus.Scheduled,
+            CreatedAt = now.AddHours(-48),
+            ScheduledStartTime = now.AddHours(-24),
+            ScheduledEndTime = now.AddHours(-22)
+        });
+
+        await ctx.Set<WorkOrder>().AddAsync(new WorkOrder
+        {
+            WorkOrderNumber = "WO-LEAD-002",
+            Title = "Lead Time Test 2",
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Status = WorkOrderStatus.Scheduled,
+            CreatedAt = now.AddHours(-72),
+            ScheduledStartTime = now.AddHours(-24),
+            ScheduledEndTime = now.AddHours(-22)
+        });
+
+        await ctx.SaveChangesAsync();
+
+        var report = await schedService.GetSchedulingReportsAsync();
+
+        // Lead times: 24h and 48h → average = 36h
+        Assert.Equal(36.0, report.AverageSchedulingLeadTimeHours);
+    }
+
+    [Fact]
+    public async Task GetSchedulingReportsAsync_ShouldReturnZeroLeadTime_WhenNoScheduledWorkOrders()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+
+        var report = await schedService.GetSchedulingReportsAsync();
+
+        Assert.Equal(0.0, report.AverageSchedulingLeadTimeHours);
     }
 }

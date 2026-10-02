@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using FixFlow.Api.DTOs;
 using FixFlow.Api.Interfaces;
+using FixFlow.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -12,10 +13,12 @@ namespace FixFlow.Api.Controllers;
 public class SchedulingController : ControllerBase
 {
     private readonly ISchedulingService _schedulingService;
+    private readonly IPythonSchedulingAgentClient _pythonAgentClient;
 
-    public SchedulingController(ISchedulingService schedulingService)
+    public SchedulingController(ISchedulingService schedulingService, IPythonSchedulingAgentClient pythonAgentClient)
     {
         _schedulingService = schedulingService;
+        _pythonAgentClient = pythonAgentClient;
     }
 
     private Guid GetCurrentUserId()
@@ -24,6 +27,7 @@ public class SchedulingController : ControllerBase
         return Guid.TryParse(idStr, out var id) ? id : Guid.Empty;
     }
 
+    [Authorize(Roles = "Administrator,Manager")]
     [HttpPost("requests/{requestId}/schedule")]
     public async Task<ActionResult<ApiResponse<ScheduleProposalDto>>> ScheduleRequest(
         Guid requestId,
@@ -34,6 +38,7 @@ public class SchedulingController : ControllerBase
         return Ok(ApiResponse<ScheduleProposalDto>.SuccessResult(proposal, "AI Scheduling proposal created successfully."));
     }
 
+    [Authorize(Roles = "Administrator,Manager,Technician")]
     [HttpPost("scheduling/validate")]
     public async Task<ActionResult<ApiResponse<ScheduleValidationResult>>> ValidateSchedule(
         [FromBody] ScheduleValidationRequestDto request)
@@ -56,6 +61,15 @@ public class SchedulingController : ControllerBase
         var hours = await _schedulingService.GetBusinessHoursAsync();
         return Ok(ApiResponse<List<BusinessHoursDto>>.SuccessResult(hours));
     }
+
+    [Authorize(Roles = "Administrator,Manager")]
+    [HttpGet("scheduling/agent-health")]
+    public async Task<ActionResult<ApiResponse<object>>> GetAgentHealth()
+    {
+        var isHealthy = await _pythonAgentClient.IsHealthyAsync();
+        var health = new { pythonAgentOnline = isHealthy, checkedAt = DateTime.UtcNow };
+        return Ok(ApiResponse<object>.SuccessResult(health));
+    }
 }
 
 public class ScheduleValidationRequestDto
@@ -71,7 +85,7 @@ public class ScheduleValidationRequestDto
 
 [ApiController]
 [Route("api/calendar")]
-[Authorize]
+[Authorize(Roles = "Administrator,Manager,Technician")]
 public class CalendarController : ControllerBase
 {
     private readonly ISchedulingService _schedulingService;
@@ -96,7 +110,7 @@ public class CalendarController : ControllerBase
 
 [ApiController]
 [Route("api/reports")]
-[Authorize]
+[Authorize(Roles = "Administrator,Manager")]
 public class WorkOrderReportsController : ControllerBase
 {
     private readonly ISchedulingService _schedulingService;

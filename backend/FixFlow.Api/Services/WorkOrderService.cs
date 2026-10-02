@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Text.Json;
 using FixFlow.Api.Data;
 using FixFlow.Api.DTOs;
@@ -11,6 +12,8 @@ namespace FixFlow.Api.Services;
 
 public class WorkOrderService : IWorkOrderService
 {
+    private static readonly SemaphoreSlim WorkOrderNumberLock = new(1, 1);
+
     private readonly FixFlowDbContext _context;
     private readonly ISchedulingService _schedulingService;
     private readonly IAuditLogService _auditLogService;
@@ -199,8 +202,17 @@ public class WorkOrderService : IWorkOrderService
         if (tech == null)
             throw new NotFoundException($"Technician '{dto.TechnicianId}' was not found.");
 
-        var workOrderCount = await _context.Set<WorkOrder>().CountAsync() + 1;
-        var workOrderNumber = $"WO-{DateTime.UtcNow:yyyyMM}-{workOrderCount:D4}";
+        await WorkOrderNumberLock.WaitAsync();
+        string workOrderNumber;
+        try
+        {
+            var workOrderCount = await _context.Set<WorkOrder>().CountAsync() + 1;
+            workOrderNumber = $"WO-{DateTime.UtcNow:yyyyMM}-{workOrderCount:D4}";
+        }
+        finally
+        {
+            WorkOrderNumberLock.Release();
+        }
 
         var priority = Enum.TryParse<WorkOrderPriority>(dto.Priority, true, out var p) ? p : WorkOrderPriority.Medium;
         var durationMinutes = dto.EstimatedDurationMinutes > 0 ? dto.EstimatedDurationMinutes : 60;
@@ -308,8 +320,17 @@ public class WorkOrderService : IWorkOrderService
             }
             else
             {
-                // No conflict — proceed to Scheduled directly
-                workOrder.Status = WorkOrderStatus.Scheduled;
+                // No conflict — check if priority requires manager approval
+                var isHighImpactPriority = priority == WorkOrderPriority.High || priority == WorkOrderPriority.Critical;
+                if (isHighImpactPriority)
+                {
+                    workOrder.Status = WorkOrderStatus.PendingManagerApproval;
+                    workOrder.AiDecisionSummary = $"No schedule conflict detected, but {priority.ToString().ToLower()} priority requires Manager sign-off before scheduling. Proposed slot reserved for Manager review.";
+                }
+                else
+                {
+                    workOrder.Status = WorkOrderStatus.Scheduled;
+                }
             }
         }
         else
@@ -320,8 +341,8 @@ public class WorkOrderService : IWorkOrderService
 
         await _context.Set<WorkOrder>().AddAsync(workOrder);
 
-        // If conflict was detected and we have scheduled times, create proposal + workflow records
-        if (conflictDetected && workOrder.ScheduledStartTime.HasValue)
+        // If approval is required (conflict or high-impact priority) and we have scheduled times, create proposal + workflow records
+        if (workOrder.Status == WorkOrderStatus.PendingManagerApproval && workOrder.ScheduledStartTime.HasValue)
         {
             // Run final validation on the proposed alternative slot
             finalValidation = await _schedulingService.ValidateScheduleAsync(
@@ -354,7 +375,7 @@ public class WorkOrderService : IWorkOrderService
                 EstimatedDurationMinutes = durationMinutes,
                 Priority = priority,
                 SlaDeadline = slaDeadlineUtc,
-                ConflictDetected = true,
+                ConflictDetected = conflictDetected,
                 ConflictDetailsJson = JsonSerializer.Serialize(conflictDetails),
                 DecisionSummary = workOrder.AiDecisionSummary,
                 ValidationDetailsJson = JsonSerializer.Serialize(checklist),
@@ -374,7 +395,7 @@ public class WorkOrderService : IWorkOrderService
                     technicianId = tech.Id,
                     proposedStart = workOrder.ScheduledStartTime.Value,
                     proposedEnd = workOrder.ScheduledEndTime!.Value,
-                    conflictDetected = true,
+                    conflictDetected,
                     decisionSummary = workOrder.AiDecisionSummary
                 })
             };
@@ -400,19 +421,63 @@ public class WorkOrderService : IWorkOrderService
                     proposalId = proposal.Id,
                     proposedStartTime = proposal.ProposedStartTime,
                     proposedEndTime = proposal.ProposedEndTime,
-                    conflictDetected = true,
+                    conflictDetected,
                     decisionSummary = workOrder.AiDecisionSummary
                 }),
                 ValidationResultJson = JsonSerializer.Serialize(checklist)
             };
+
+            var activeStatusesForCount = new[]
+            {
+                WorkOrderStatus.Proposed,
+                WorkOrderStatus.PendingManagerApproval,
+                WorkOrderStatus.Approved,
+                WorkOrderStatus.Scheduled,
+                WorkOrderStatus.InProgress,
+                WorkOrderStatus.Paused
+            };
+
+            var sw = Stopwatch.StartNew();
+            var activeBookingsCount = await _context.Set<WorkOrder>()
+                .CountAsync(w => !w.IsDeleted &&
+                                 w.TechnicianId == tech.Id &&
+                                 activeStatusesForCount.Contains(w.Status));
+            sw.Stop();
+            var techCalendarTimeMs = (int)sw.ElapsedMilliseconds;
+
+            sw.Restart();
+            var scheduledStartLocal = SchedulingService.ConvertToLocal(workOrder.ScheduledStartTime.Value);
+            var proposedDayOfWeek = (int)scheduledStartLocal.DayOfWeek;
+            var actualBusinessHours = await _context.Set<BusinessHours>()
+                .FirstOrDefaultAsync(b => b.DayOfWeek == proposedDayOfWeek);
+            sw.Stop();
+            var businessHoursTimeMs = (int)sw.ElapsedMilliseconds;
+
+            sw.Restart();
+            var conflictingCount = await _context.Set<WorkOrder>()
+                .Where(w => !w.IsDeleted &&
+                            w.TechnicianId == tech.Id &&
+                            activeStatusesForCount.Contains(w.Status) &&
+                            w.ScheduledStartTime.HasValue &&
+                            w.ScheduledEndTime.HasValue &&
+                            w.ScheduledStartTime.Value < workOrder.ScheduledEndTime!.Value &&
+                            w.ScheduledEndTime.Value > workOrder.ScheduledStartTime.Value)
+                .CountAsync();
+            sw.Stop();
+            var existingWorkOrdersTimeMs = (int)sw.ElapsedMilliseconds;
+
+            sw.Restart();
+            var validationData = finalValidation;
+            sw.Stop();
+            var validationTimeMs = (int)sw.ElapsedMilliseconds;
 
             schedulingStep.ToolCalls.Add(new AgentToolCall
             {
                 StepId = schedulingStep.Id,
                 ToolName = "GetTechnicianCalendar",
                 InputJson = JsonSerializer.Serialize(new { technicianId = tech.Id }),
-                OutputJson = JsonSerializer.Serialize(new { isAvailable = tech.IsAvailable }),
-                ExecutionTimeMs = 45,
+                OutputJson = JsonSerializer.Serialize(new { isAvailable = tech.IsAvailable, activeBookingsCount }),
+                ExecutionTimeMs = techCalendarTimeMs,
                 Success = true
             });
 
@@ -420,19 +485,24 @@ public class WorkOrderService : IWorkOrderService
             {
                 StepId = schedulingStep.Id,
                 ToolName = "GetBusinessHours",
-                InputJson = JsonSerializer.Serialize(new { date = workOrder.ScheduledStartTime.Value }),
-                OutputJson = JsonSerializer.Serialize(new { open = "08:00", close = "17:00", isWorkingDay = true }),
-                ExecutionTimeMs = 20,
-                Success = true
+                InputJson = JsonSerializer.Serialize(new { date = scheduledStartLocal.ToString("yyyy-MM-dd"), dayOfWeek = proposedDayOfWeek }),
+                OutputJson = JsonSerializer.Serialize(new
+                {
+                    open = actualBusinessHours?.OpenTime.ToString(@"hh\:mm") ?? "N/A",
+                    close = actualBusinessHours?.CloseTime.ToString(@"hh\:mm") ?? "N/A",
+                    isWorkingDay = actualBusinessHours?.IsWorkingDay ?? false
+                }),
+                ExecutionTimeMs = businessHoursTimeMs,
+                Success = actualBusinessHours != null
             });
 
             schedulingStep.ToolCalls.Add(new AgentToolCall
             {
                 StepId = schedulingStep.Id,
                 ToolName = "GetExistingWorkOrders",
-                InputJson = JsonSerializer.Serialize(new { technicianId = tech.Id }),
-                OutputJson = JsonSerializer.Serialize(new { conflictCount = conflictDetails.Count }),
-                ExecutionTimeMs = 35,
+                InputJson = JsonSerializer.Serialize(new { technicianId = tech.Id, checkDate = scheduledStartLocal.ToString("yyyy-MM-dd") }),
+                OutputJson = JsonSerializer.Serialize(new { conflictCount = conflictingCount, activeBookingsCount }),
+                ExecutionTimeMs = existingWorkOrdersTimeMs,
                 Success = true
             });
 
@@ -440,9 +510,9 @@ public class WorkOrderService : IWorkOrderService
             {
                 StepId = schedulingStep.Id,
                 ToolName = "ValidateSchedule",
-                InputJson = JsonSerializer.Serialize(new { proposedStart = workOrder.ScheduledStartTime.Value }),
-                OutputJson = JsonSerializer.Serialize(finalValidation),
-                ExecutionTimeMs = 30,
+                InputJson = JsonSerializer.Serialize(new { technicianId = tech.Id, start = workOrder.ScheduledStartTime.Value, end = workOrder.ScheduledEndTime.Value }),
+                OutputJson = JsonSerializer.Serialize(validationData),
+                ExecutionTimeMs = validationTimeMs,
                 Success = finalValidation.IsValid
             });
 
@@ -465,8 +535,10 @@ public class WorkOrderService : IWorkOrderService
             PreviousStatus = WorkOrderStatus.Draft,
             NewStatus = workOrder.Status,
             ChangedById = creatorUserId,
-            Reason = conflictDetected
-                ? "Work order created with schedule conflict. Routed to Manager for review."
+            Reason = workOrder.Status == WorkOrderStatus.PendingManagerApproval
+                ? (conflictDetected
+                    ? "Work order created with schedule conflict. Routed to Manager for review."
+                    : $"Work order created with {priority.ToString().ToLower()} priority. Routed to Manager for approval.")
                 : "Work order created with assigned technician."
         };
         await _context.Set<WorkOrderStatusHistory>().AddAsync(history);
@@ -718,6 +790,14 @@ public class WorkOrderService : IWorkOrderService
             }
         }
 
+        // Mark the related ScheduleProposal as accepted
+        var proposal = await _context.Set<ScheduleProposal>()
+            .FirstOrDefaultAsync(p => p.WorkOrderId == workOrder.Id && !p.IsAccepted);
+        if (proposal != null)
+        {
+            proposal.IsAccepted = true;
+        }
+
         // Add history
         var history = new WorkOrderStatusHistory
         {
@@ -754,13 +834,41 @@ public class WorkOrderService : IWorkOrderService
 
     public async Task<WorkOrderDto> RejectWorkOrderAsync(Guid id, WorkOrderApprovalDecisionDto decision, Guid approverUserId)
     {
-        var workOrder = await _context.Set<WorkOrder>().FirstOrDefaultAsync(w => w.Id == id && !w.IsDeleted);
+        var workOrder = await _context.Set<WorkOrder>()
+            .Include(w => w.Request)
+            .FirstOrDefaultAsync(w => w.Id == id && !w.IsDeleted);
         if (workOrder == null) throw new NotFoundException($"Work order '{id}' not found.");
 
         var prev = workOrder.Status;
         workOrder.Status = WorkOrderStatus.Rejected;
         workOrder.ApprovalComments = decision.Comments;
         workOrder.UpdatedAt = DateTime.UtcNow;
+
+        // Update Workflow & ApprovalAction state
+        var workflow = await _context.AgentWorkflows
+            .Include(w => w.ApprovalActions)
+            .FirstOrDefaultAsync(w => w.RequestId == workOrder.RequestId && w.Status == WorkflowStatus.WaitingForApproval);
+
+        if (workflow != null)
+        {
+            workflow.Status = WorkflowStatus.Rejected;
+            workflow.CompletedAt = DateTime.UtcNow;
+            foreach (var action in workflow.ApprovalActions.Where(a => a.Status == ApprovalStatus.Pending))
+            {
+                action.Status = ApprovalStatus.Rejected;
+                action.ApproverId = approverUserId;
+                action.Comments = decision.Comments;
+                action.DecidedAt = DateTime.UtcNow;
+            }
+        }
+
+        // Mark the related ScheduleProposal as not accepted
+        var proposal = await _context.Set<ScheduleProposal>()
+            .FirstOrDefaultAsync(p => p.WorkOrderId == workOrder.Id);
+        if (proposal != null)
+        {
+            proposal.IsAccepted = false;
+        }
 
         var history = new WorkOrderStatusHistory
         {

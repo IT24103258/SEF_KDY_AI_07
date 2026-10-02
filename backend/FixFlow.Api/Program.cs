@@ -142,6 +142,7 @@ builder.Services.AddSwaggerGen(c =>
 // ============================================================
 builder.Services.AddScoped<ISchedulingService, SchedulingService>();
 builder.Services.AddScoped<IWorkOrderService, WorkOrderService>();
+builder.Services.AddHttpClient<IPythonSchedulingAgentClient, PythonSchedulingAgentClient>();
 
 
 // ============================================================
