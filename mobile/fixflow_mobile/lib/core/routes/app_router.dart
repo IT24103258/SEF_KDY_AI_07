@@ -1,10 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
-<<<<<<< HEAD
-
-=======
->>>>>>> main
 import '../../screens/login_screen.dart';
 import '../../screens/register_screen.dart';
 import '../../screens/home_screen.dart';
@@ -81,16 +77,6 @@ class AppRouter {
   // MEMBER 3 ROUTE CONSTANTS — TECHNICIAN MATCHING & ASSIGNMENT
   // ============================================================
   static const String technicianHome = '/technician-home';
-
-  static String homeRouteFor(String role) {
-    switch (role.toLowerCase()) {
-      case 'technician':
-        return technicianHome;
-      case 'requester':
-      default:
-        return home;
-    }
-  }
 
   // ============================================================
   // MEMBER 4 ROUTE CONSTANTS — SCHEDULING & WORK ORDER MANAGEMENT
@@ -234,13 +220,6 @@ class _RouteGuardState extends State<_RouteGuard> {
     String? redirect;
     if (!auth.isAuthenticated) {
       redirect = AppRouter.login;
-<<<<<<< HEAD
-    } else if (auth.user == null || auth.user?.role == null) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-=======
->>>>>>> main
     } else if (widget.allowedRoles != null &&
         !widget.allowedRoles!.contains(auth.user!.role)) {
       redirect = AppRouter.homeRouteFor(auth.user!.role);
