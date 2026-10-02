@@ -73,7 +73,7 @@ public class AuthService : IAuthService
         }
 
         var role = await _context.Roles.FirstOrDefaultAsync(r => r.Name.ToLower() == request.RoleName.ToLower())
-                     ?? await _context.Roles.FirstAsync(r => r.Name == "Requester");
+                   ?? await _context.Roles.FirstAsync(r => r.Name == "Requester");
 
         var user = new User
         {
@@ -87,25 +87,6 @@ public class AuthService : IAuthService
 
         await _context.Users.AddAsync(user);
         await _context.SaveChangesAsync();
-
-        if (role.Name.Equals("Technician", StringComparison.OrdinalIgnoreCase))
-        {
-            var technician = new Technician
-            {
-                Id = Guid.NewGuid(),
-                UserId = user.Id,
-                EmployeeId = $"TECH-{new Random().Next(100, 999)}",
-                Specialization = !string.IsNullOrEmpty(request.Specialization) ? request.Specialization : "General",
-                IsAvailable = true,
-                CurrentLatitude = 0.0,
-                CurrentLongitude = 0.0,
-                IsDeleted = false,
-                CreatedAt = DateTime.UtcNow
-            };
-
-            await _context.Technicians.AddAsync(technician);
-            await _context.SaveChangesAsync();
-        }
 
         user.Role = role;
         return MapUserToDto(user);

@@ -50,52 +50,63 @@ const CSHARP_BASE_URL = 'http://localhost:5000/api/technicians';
 const STANDALONE_ASSIGNMENT_URL = 'http://localhost:8000/api/agent/assignment/test';
 
 export const technicianApi = {
-  fetchRequests: () => api.get('/requests'),
   fetchTechnicians: () => fetch(CSHARP_BASE_URL).then(res => res.json()),
 
   fetchRecommendation: async (requestData) => {
-    const response = await fetch(`${CSHARP_BASE_URL}/assignment-recommendation`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        RequestId: String(requestData.requestId || ""),
-        RequiredSkill: String(requestData.requiredSkill || ""),
-        PriorityLevel: String(requestData.priorityLevel || "Normal")
-      })
-    });
+    try {
+      // Extracting a numeric ID from a String ID (e.g. "REQ-101" -> 101)
+      const rawReqId = requestData.requestId || requestData.request_id || 101;
+      const parsedReqId = typeof rawReqId === 'number' 
+        ? rawReqId 
+        : parseInt(String(rawReqId).replace(/\D/g, '') || '101', 10);
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(errorText || 'Failed to fetch dynamic recommendation');
+      // Sending a direct call to the Standalone Endpoint
+      const response = await fetch(STANDALONE_ASSIGNMENT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          request_id: parsedReqId,
+          required_skill: requestData.requiredSkill || requestData.category || "Electrical",
+          priority: requestData.priority || "High"
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const stepResult = data.result;
+        const output = stepResult?.output_data;
+
+        if (output) {
+          return {
+            success: true,
+            recommended_candidates: output.recommended_candidates || [],
+            top_match_id: output.top_match_id
+          };
+        }
+      }
+    } catch (e) {
+      console.warn("Standalone Assignment Agent call failed, falling back to C# Gateway...", e);
     }
 
-    const data = await response.json();
-    
-    return {
-      success: true,
-      technicianName: data.technicianName || data.TechnicianName,
-      matchScore: data.matchScore || data.MatchScore,
-      reasoningSummary: data.reasoningSummary || data.ReasoningSummary,
-      recommendedTechnicianId: data.recommendedTechnicianId || data.RecommendedTechnicianId
-    };
+    // Fallback to C# Gateway
+    return fetch(`${CSHARP_BASE_URL}/assignment-recommendation`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestData)
+    }).then(res => res.json());
   },
 
-  assignTechnician: async (assignmentData) => {
-    const rawReqId = assignmentData.requestId || assignmentData.request_id || "101";
-    const stringReqId = typeof rawReqId === 'number' ? String(rawReqId) : String(rawReqId);
-    const numericTechId = String(assignmentData.technicianId || assignmentData.technician_id || "1").replace(/\D/g, '') || "1";
-
-    const payload = {
-      RequestId: stringReqId,
-      RequiredSkill: String(assignmentData.requiredSkill || assignmentData.required_skill || "Electrical"),
-      PriorityLevel: String(assignmentData.priorityLevel || assignmentData.priority || "Medium"),
-      TechnicianId: numericTechId
-    };
+  assignTechnician: async (requestId, technicianId) => {
+    const numericTechId = String(technicianId).replace(/\D/g, '') || "1";
+    const parsedReqId = parseInt(String(requestId).replace(/\D/g, '') || '101', 10);
 
     const response = await fetch(`${CSHARP_BASE_URL}/assign`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify({
+        requestId: parsedReqId,
+        technicianId: numericTechId
+      })
     });
 
     const contentType = response.headers.get("content-type");
@@ -110,26 +121,6 @@ export const technicianApi = {
     }
   },
 
-  fetchMyJobs: async (email) => {
-    // If an email is provided, use it as a query parameter for the backend
-    const url = email 
-      ? `${CSHARP_BASE_URL}/my-jobs?email=${encodeURIComponent(email)}` 
-      : `${CSHARP_BASE_URL}/my-jobs`;
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
-    });
-    
-    const contentType = response.headers.get("content-type");
-    if (contentType && contentType.includes("application/json")) {
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.message || 'Failed to fetch jobs');
-      return data;
-    } else {
-      const errorText = await response.text();
-      if (!response.ok) throw new Error(errorText || 'Failed to fetch jobs');
-      return [];
-    }
-  },
+  fetchMyJobs: (email) =>
+    fetch(`${CSHARP_BASE_URL}/my-jobs?email=${encodeURIComponent(email)}`).then(res => res.json())
 };
