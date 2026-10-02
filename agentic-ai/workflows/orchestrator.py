@@ -1,8 +1,12 @@
 import uuid
+from fastapi import FastAPI, HTTPException, APIRouter
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from fastapi import APIRouter, HTTPException
 from schemas.workflow_schemas import WorkflowExecutionRequest, WorkflowExecutionResult, StepExecutionResult
 from agents.agent_skeletons import ClassificationAgent, PriorityAgent, AssignmentAgent, SchedulingAgent
 
+app = FastAPI()
 router = APIRouter()
 
 '''
@@ -45,6 +49,37 @@ class StandaloneAssignmentRequest(BaseModel):
 def health_check():
     return {"status": "healthy", "service": "FixFlow Agentic AI Orchestrator"}
 
+@app.post("/agent/assign")
+def direct_assign(request: DirectAssignRequest):
+    return {
+        "status": "SUCCESS",
+        "message": f"Technician {request.technicianId} assigned to request {request.requestId} via AI Orchestrator",
+        "request_id": request.requestId,
+        "technician_id": request.technicianId
+    }
+
+# ============================================================
+# MEMBER 3 — DEDICATED STANDALONE TEST ENDPOINT
+# ============================================================
+@app.post("/api/agent/assignment/test")
+def test_assignment_agent_only(request: StandaloneAssignmentRequest):
+
+    assignment_agent = AssignmentAgent()
+    
+    step3_result = assignment_agent.run_step({
+        "request_id": request.request_id,
+        "required_skill": request.required_skill,
+        "priority": request.priority
+    })
+    
+    return {
+        "status": "SUCCESS",
+        "result": step3_result
+    }
+
+# ============================================================
+# MAIN MULTI-AGENT WORKFLOW ORCHESTRATOR
+# ============================================================
 
 # ---------------------------------------------------------------------------
 # Shared, auditable planning metadata. The orchestrator always executes the
@@ -114,7 +149,7 @@ def execute_workflow(request: WorkflowExecutionRequest):
     assignment_agent = AssignmentAgent()
     step3_result = assignment_agent.run_step({
         "request_id": request.request_id,
-        "required_skill": step1_result.output_data.get("category", "General"),
+        "required_skill": step1_result.output_data.get("required_skill", "General"),#previously was category, but now we are using required_skill for better matching
         "priority": step2_result.output_data.get("priority_level", "Normal")
     })
     steps.append(step3_result)
@@ -140,3 +175,5 @@ def execute_workflow(request: WorkflowExecutionRequest):
         requires_human_approval=requires_approval,
         approval_reason=approval_reason
     )
+
+app.include_router(router)

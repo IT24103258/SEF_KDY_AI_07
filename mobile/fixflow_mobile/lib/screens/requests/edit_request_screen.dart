@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -21,10 +21,13 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
   String? _selectedLocationId;
   String? _selectedBuilding;
   String? _selectedFloor;
-  String? _selectedCategoryId;
 
-  File? _pickedImage;
+  Uint8List? _pickedImageBytes;
+  String? _pickedImageName;
   bool _submitted = false;
+
+  // Backend RequestService.UploadAttachmentAsync rejects files above 5 MB.
+  static const int _maxImageBytes = 5 * 1024 * 1024;
 
   @override
   void initState() {
@@ -48,9 +51,8 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
       setState(() {
         _titleCtrl.text = detail.title;
         _descCtrl.text = detail.description;
-        _selectedCategoryId = detail.categoryId;
         _selectedLocationId = detail.locationId;
-        
+
         final loc = provider.locations.cast<DropdownOption?>().firstWhere(
             (l) => l?.id == detail.locationId, orElse: () => null);
         if (loc != null) {
@@ -62,12 +64,30 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
   }
 
   Future<void> _pickImage() async {
-    final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-    if (picked != null) {
-      setState(() {
-        _pickedImage = File(picked.path);
-      });
+    try {
+      final picker = ImagePicker();
+      final picked =
+          await picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+      if (picked != null) {
+        final bytes = await picked.readAsBytes();
+        if (bytes.length > _maxImageBytes) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Photo is too large. Maximum size is 5 MB.'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+        setState(() {
+          _pickedImageBytes = bytes;
+          _pickedImageName = picked.name;
+        });
+      }
+    } catch (_) {
+      // Picker cancelled or gallery unavailable — keep the previous selection.
     }
   }
 
@@ -75,17 +95,40 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final provider = context.read<RequestProvider>();
-    
-    // Attempt edit
+
+    // Attempt edit (category is AI-owned and never edited here)
     final success = await provider.updateRequest(
       _requestId!,
       title:       _titleCtrl.text.trim(),
       description: _descCtrl.text.trim(),
       locationId:  _selectedLocationId!,
-      categoryId:  _selectedCategoryId,
     );
 
     if (success) {
+      // Upload only happens after the update succeeded — a photo failure
+      // must not discard the edited request.
+      bool uploadOk = true;
+      if (_pickedImageBytes != null) {
+        uploadOk = await provider.uploadAttachment(
+          _requestId!,
+          _pickedImageBytes!,
+          _pickedImageName ?? 'photo.jpg',
+        );
+        if (!uploadOk) provider.clearError();
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(uploadOk
+              ? '✅ Request updated!'
+              : '✅ Request updated, but the photo could not be uploaded. Please try again later.'),
+          backgroundColor: uploadOk ? Colors.green : Colors.orange,
+          duration: uploadOk
+              ? const Duration(seconds: 1)
+              : const Duration(seconds: 4),
+        ),
+      );
       setState(() => _submitted = true);
       // Wait for banner, then go back to detail screen
       await Future.delayed(const Duration(seconds: 1));
@@ -97,7 +140,6 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
   Widget build(BuildContext context) {
     final provider   = context.watch<RequestProvider>();
     final locations  = provider.locations;
-    final categories = provider.categories;
     final isLoading  = provider.isLoading;
 
     final buildings = locations.map((l) => l.building).where((b) => b.isNotEmpty).toSet().toList()
@@ -240,21 +282,10 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
               ),
               const SizedBox(height: 12),
 
-              DropdownButtonFormField<String>(
-                key: ValueKey(_selectedCategoryId),
-                initialValue: _selectedCategoryId,
-                decoration: const InputDecoration(
-                  labelText: 'Category (optional — AI will classify if blank)',
-                  border:    OutlineInputBorder(),
-                ),
-                items: categories
-                    .map((c) => DropdownMenuItem(value: c.id, child: Text(c.name)))
-                    .toList(),
-                onChanged: isLoading || _submitted
-                    ? null
-                    : (v) => setState(() => _selectedCategoryId = v),
-              ),
-              const SizedBox(height: 24),
+              // Category is intentionally absent — it is AI-determined via
+              // classification, never chosen by the requester (same as React).
+
+              const SizedBox(height: 12),
 
               InkWell(
                 onTap: (isLoading || _submitted) ? null : _pickImage,
@@ -280,7 +311,7 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
                 ),
               ),
               
-              if (_pickedImage != null)
+              if (_pickedImageBytes != null)
                 Padding(
                   padding: const EdgeInsets.only(top: 16),
                   child: Row(
@@ -288,12 +319,12 @@ class _EditRequestScreenState extends State<EditRequestScreen> {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.file(_pickedImage!, height: 80, width: 80, fit: BoxFit.cover),
+                        child: Image.memory(_pickedImageBytes!, height: 80, width: 80, fit: BoxFit.cover),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Note: Cloudinary upload is a follow-up feature. For now, this is just a local preview.',
+                          _pickedImageName ?? 'photo.jpg',
                           style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
                         ),
                       ),

@@ -132,6 +132,8 @@ public class RequestDetailDto
     public DateTime? UpdatedAt { get; set; }
     /// <summary>All classification attempts/overrides, newest first.</summary>
     public List<ClassificationResultDto> Classifications { get; set; } = new();
+    /// <summary>Photos uploaded by the requester (Cloudinary SecureUrls), oldest first.</summary>
+    public List<AttachmentDto> Attachments { get; set; } = new();
 }
 
 /// <summary>
@@ -147,6 +149,8 @@ public class ClassificationResultDto
     public bool RequiresReview { get; set; }
     public string? RequiredSkill { get; set; }
     public string? Reason { get; set; }
+    /// <summary>Asset the classifier detected from the request text (null if none).</summary>
+    public string? DetectedAsset { get; set; }
     public bool IsOverride { get; set; }
     /// <summary>Full name of the manager who overrode (null for AI-generated rows).</summary>
     public string? OverriddenByUserName { get; set; }
@@ -178,5 +182,16 @@ public class AgentClassificationResponseDto
     [System.Text.Json.Serialization.JsonPropertyName("required_skill")]
     public string? RequiredSkill { get; set; }
 
+    [System.Text.Json.Serialization.JsonPropertyName("detected_asset")]
+    public string? DetectedAsset { get; set; }
+
     public string? Reason { get; set; }
+}
+
+public class AttachmentDto
+{
+    public Guid Id { get; set; }
+    public string SecureUrl { get; set; } = string.Empty;
+    public string FileName { get; set; } = string.Empty;
+    public DateTime CreatedAt { get; set; }
 }

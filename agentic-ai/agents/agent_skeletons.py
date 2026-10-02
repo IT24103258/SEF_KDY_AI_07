@@ -29,6 +29,7 @@ from tools.domain_tools import ALLOW_LISTED_TOOLS
 from schemas.agent_schemas import ClassificationOutput, PriorityOutput, AssignmentOutput, ScheduleProposal
 from schemas.workflow_schemas import StepExecutionResult
 from validators.deterministic_validator import DeterministicValidator
+from classification.classifier import classify_request
 from typing import Dict, Any
 import re
 
@@ -45,12 +46,8 @@ class ClassificationAgent(BaseAgent):
     def run_step(self, input_context: Dict[str, Any]) -> StepExecutionResult:
         tool_log = self.execute_tool("get_issue_category_rules", category_name=input_context.get("title", ""))
 
-        output = {
-            "category": "HVAC",
-            "subcategory": "Lobby AC Cooling Failure",
-            "confidence_score": 0.92,
-            "requires_review": False
-        }
+        classify_result = classify_request(input_context.get("title") or "", input_context.get("description") or "")
+        output = classify_result.model_dump()
 
         is_valid, parsed, err = DeterministicValidator.validate_schema(output, ClassificationOutput)
         requires_human, approval_reason = DeterministicValidator.check_human_approval_required(self.name, output)
@@ -619,125 +616,27 @@ class PriorityAgent(BaseAgent):
             tool_calls=tool_logs
         )
 
-<<<<<<< HEAD
 import requests
 from typing import Dict, Any
-=======
-    # -----------------------------------------------------------------------
-    # Safe-failure helper
-    # -----------------------------------------------------------------------
-
-    def _safe_failure(
-        self,
-        tool_logs: list,
-        reason: str,
-        input_context: Dict[str, Any]
-    ) -> StepExecutionResult:
-        """
-        Returns a FAILED step requiring human review.
-        No unsafe automatic decision is made when a tool fails.
-        """
-        return StepExecutionResult(
-            agent_name=self.name,
-            step_name="Risk & Priority Assessment",
-            status="FAILED",
-            output_data={
-                "error": reason,
-                "request_id": input_context.get("request_id", ""),
-                "human_approval_required": True,
-                "approval_reason": f"Flagged for downstream human review — tool failure (safe failure): {reason}",
-                "status": "FAILED",
-                "validation_passed": False,
-                "risk_score": None,
-                "risk_level": None,
-                "priority": None,
-            },
-            validation_passed=False,
-            tool_calls=tool_logs
-        )
-
->>>>>>> main
 
 class AssignmentAgent(BaseAgent):
     def __init__(self):
         tools = [ALLOW_LISTED_TOOLS["get_technician_skills"]]
         super().__init__("AssignmentAgent", tools)
-        
-        # Mock techniques to test scoring logic for a C# API while offline.
-        self.mock_technicians = [
-            {"id": "TECH-101", "fullName": "Kamal Perera", "skills": ["Electrical", "HVAC"], "status": "Active", "distanceKm": 1.5, "workload": 1},
-            {"id": "TECH-102", "name": "Nimal Silva", "skills": ["Plumbing"], "status": "Active", "distanceKm": 4.2, "workload": 5},
-            {"id": "TECH-103", "name": "Saman Kumara", "skills": ["Electrical Maintenance"], "status": "Active", "distanceKm": 0.8, "workload": 0},
-        ]
 
     def run_step(self, input_context: Dict[str, Any]) -> StepExecutionResult:
-        tool_log = self.execute_tool("get_technician_skills", technician_id="TECH-001")
-<<<<<<< HEAD
-        
-        request_id = str(input_context.get("request_id", "REQ-001"))
+        # Retrieving the `request_id` and `required_skill` from previous steps.
+        request_id = input_context.get("request_id")
         required_skill = input_context.get("required_skill", "Electrical")
-        csharp_api_url = "http://localhost:5103/api/technicians"
 
-        candidates = []
-        technicians = []
+        # Running the tool to obtain actual data
+        tool_log = self.execute_tool("get_technician_skills", skill=required_skill)
 
-        # Step 1: Calling the C# API (uses mock data if it fails)
-        try:
-            response = requests.get(f"{csharp_api_url}?skill={required_skill}", timeout=2)
-            if response.status_code == 200 and response.json():
-                technicians = response.json()
-            else:
-                fallback_resp = requests.get(csharp_api_url, timeout=2)
-                technicians = fallback_resp.json() if fallback_resp.status_code == 200 else []
-        except Exception:
-            # Falling back to mock data for standalone testing
-            technicians = self.mock_technicians
+        # Organizing the results obtained from the tool into a list of candidates.
+        candidates = tool_log.output_params.get("technicians", []) if tool_log else []
 
-        if not technicians:
-            technicians = self.mock_technicians
-
-        # Step 2: Scoring Decision Engine (Member 3 Logic)
-        best_match = None
-        highest_score = -1.0
-
-        for tech in technicians:
-            score = 0.50  # Base Score
-            
-            # Skill Matching Logic
-            skills_list = tech.get("skills", [])
-            has_exact_skill = any(required_skill.lower() in str(s).lower() for s in skills_list)
-            if has_exact_skill:
-                score += 0.35
-            
-            # Active Status Bonus
-            if tech.get("status") == "Active":
-                score += 0.10
-
-            # Workload Penalty
-            workload = tech.get("workload", 0)
-            score -= (workload * 0.03)
-
-            # Round off score
-            final_score = round(max(0.10, min(0.99, score)), 2)
-
-            formatted_cand = {
-                "technician_id": str(tech.get("id", "TECH-001")),
-                "name": tech.get("fullName") or tech.get("name") or "Unknown Tech",
-                "match_score": final_score,
-                "distance_km": float(tech.get("distanceKm", 1.2)),
-                "current_workload": workload
-            }
-            candidates.append(formatted_cand)
-
-            if final_score > highest_score:
-                highest_score = final_score
-                best_match = formatted_cand
-
-        # Selecting the person with the high score as the 'Top Match'
-        candidates.sort(key=lambda x: x["match_score"], reverse=True)
-        top_match_id = candidates[0]["technician_id"] if candidates else "TECH-001"
-=======
->>>>>>> main
+        # Retrieving the ID of the most suitable candidate.
+        top_match_id = candidates[0].get("id") if candidates else None
 
         output = {
             "request_id": request_id,
@@ -755,7 +654,7 @@ class AssignmentAgent(BaseAgent):
             status="REQUIRES_HUMAN_APPROVAL" if requires_human else "SUCCESS",
             output_data=output,
             validation_passed=is_valid,
-            tool_calls=[tool_log]
+            tool_calls=[tool_log] if tool_log else []
         )
 
 

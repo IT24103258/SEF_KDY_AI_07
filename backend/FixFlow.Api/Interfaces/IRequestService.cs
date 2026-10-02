@@ -1,5 +1,5 @@
 using FixFlow.Api.DTOs;
-
+using Microsoft.AspNetCore.Http;
 namespace FixFlow.Api.Interfaces;
 
 /// <summary>
@@ -57,17 +57,23 @@ public interface IRequestService
 
     /// <summary>Returns all active issue categories — used to populate the category dropdown.</summary>
     Task<List<IssueCategoryDto>> GetCategoriesAsync();
+
+    /// <summary>
+    /// Uploads a file to Cloudinary, creates a RequestAttachment row, and returns the attachment DTO.
+    /// Throws <see cref="Exceptions.ForbiddenException"/> if the caller doesn't own the request and is not staff.
+    /// </summary>
+    Task<AttachmentDto> UploadAttachmentAsync(Guid requestId, IFormFile file, Guid callerId);
 }
 
 /// <summary>
 /// HTTP client contract for the Python FastAPI classification microservice.
 /// Returns null on timeout, HTTP error, or any network failure — callers must handle the null case.
 /// </summary>
+/// <summary>
+/// HTTP client contract for the Python FastAPI classification microservice.
+/// Returns null on timeout, HTTP error, or any network failure — callers must handle the null case.
+/// </summary>
 public interface IClassificationAgentService
 {
-    /// <summary>
-    /// Sends the request title and description to the Python agent and returns the structured result.
-    /// Returns <c>null</c> if the call times out (10 s) or fails for any reason.
-    /// </summary>
     Task<AgentClassificationResponseDto?> ClassifyAsync(string title, string description, CancellationToken ct = default);
 }

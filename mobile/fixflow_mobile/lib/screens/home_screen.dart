@@ -39,27 +39,28 @@ class HomeScreen extends StatelessWidget {
                   child: Icon(Icons.person, color: Colors.white),
                 ),
                 title: Text(
-                  'Welcome, ${authProvider.user?.firstName ?? 'Technician'}!',
+                  'Welcome, ${authProvider.user?.firstName ?? 'there'}!',
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                subtitle: Text('Role: ${authProvider.user?.role ?? 'Technician'}'),
+                subtitle: Text('Role: ${authProvider.user?.role ?? '—'}'),
               ),
             ),
             const SizedBox(height: 20),
 
-            // Technician Quick Access Card
-            Card(
-              color: const Color(0xFF2563EB).withOpacity(0.08),
-              child: ListTile(
-                leading: const Icon(Icons.build_circle, color: Color(0xFF2563EB), size: 36),
-                title: const Text('My Assigned Jobs', style: TextStyle(fontWeight: FontWeight.bold)),
-                subtitle: const Text('View and update assigned maintenance tasks'),
-                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                onTap: () {
-                  Navigator.pushNamed(context, AppRouter.technicianHome);
-                },
+            // Technician Quick Access Card — Technician workflow
+            if (role == 'Technician')
+              Card(
+                color: const Color(0xFF2563EB).withOpacity(0.08),
+                child: ListTile(
+                  leading: const Icon(Icons.build_circle, color: Color(0xFF2563EB), size: 36),
+                  title: const Text('My Assigned Jobs', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('View and update assigned maintenance tasks'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    Navigator.pushNamed(context, AppRouter.technicianHome);
+                  },
+                ),
               ),
-            ),
 
             const SizedBox(height: 24),
             const Text(
@@ -100,13 +101,24 @@ class HomeScreen extends StatelessWidget {
                   ),
                 ),
               ),
+            ] else if (role == 'Technician') ...[
+              // The technician's assigned jobs live in the card above.
+              const Text(
+                'Open "My Assigned Jobs" above to view and update your tasks.',
+                style: TextStyle(color: Colors.grey),
+              ),
             ] else ...[
-              // Staff roles (Manager/Administrator/Technician) land here for now.
-              // Other members: add your own quick actions in this block.
+              // Manager / Administrator workflow — classification review &
+              // override happens from a request in the queue.
               _QuickAction(
-                icon: Icons.list_alt,
-                label: 'My Requests',
-                onTap: () => Navigator.pushNamed(context, AppRouter.myRequests),
+                icon: Icons.pending_actions,
+                label: 'Request Queue',
+                onTap: () => Navigator.pushNamed(context, AppRouter.requestQueue),
+              ),
+              _QuickAction(
+                icon: Icons.verified_outlined,
+                label: 'Risk & Priority Overview',
+                onTap: () => Navigator.pushNamed(context, AppRouter.riskMatrix),
               ),
             ],
           ],

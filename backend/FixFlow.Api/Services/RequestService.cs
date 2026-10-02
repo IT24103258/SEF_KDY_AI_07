@@ -18,6 +18,7 @@ public class RequestService : IRequestService
 {
     private readonly FixFlowDbContext _context;
     private readonly IClassificationAgentService _classificationAgent;
+    private readonly IFileStorageService _fileStorage;
     private readonly IPriorityAgentService _priorityAgent;
     private readonly ILogger<RequestService> _logger;
 
@@ -29,11 +30,13 @@ public class RequestService : IRequestService
     FixFlowDbContext context,
     IClassificationAgentService classificationAgent,
     IPriorityAgentService priorityAgent,
+    IFileStorageService fileStorage,
     ILogger<RequestService> logger)
 {
     _context = context;
     _classificationAgent = classificationAgent;
     _priorityAgent = priorityAgent;
+    _fileStorage = fileStorage;
     _logger = logger;
 }
 
@@ -182,6 +185,11 @@ public class RequestService : IRequestService
             .Select(s => s.Name)
             .ToListAsync();
 
+        var validAssets = await _context.Assets
+            .Where(a => !a.IsDeleted)
+            .Select(a => a.Name)
+            .ToListAsync();
+
         // Call agent — retry once on any failure, then fall back gracefully
         AgentClassificationResponseDto? agentResult = null;
         for (int attempt = 1; attempt <= 2; attempt++)
@@ -198,8 +206,11 @@ public class RequestService : IRequestService
         }
 
         // Validate agent output; replace with safe defaults if anything is wrong
-        var classification = BuildClassificationRow(agentResult, validCategories, validSkills, id);
-
+        var classification = BuildClassificationRow(agentResult, validCategories, validSkills, validAssets, id);
+        _logger.LogInformation(
+           "DEBUG Classification: AgentDetectedAsset='{AgentDetectedAsset}', BuiltDetectedAsset='{BuiltDetectedAsset}'",
+           agentResult?.DetectedAsset,
+           classification.DetectedAsset);// DEBUG log to verify that the detected asset is being correctly validated and stored
         _context.Set<RequestClassification>().Add(classification);
 
         if (classification.Category != "Uncategorized")
@@ -311,6 +322,22 @@ return MapClassificationToDto(classification, null);
 
         await _context.SaveChangesAsync();
 
+        // Run Component 2 after a manual classification override
+        try
+        {
+           await _priorityAgent.EvaluateAndPersistAsync(
+              id,
+              null,
+              "PriorityAgent");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(
+               ex,
+                "PriorityAgent workflow failed after manual classification override for request {RequestId}.",
+               id);
+        }
+
         var manager = await _context.Users.FindAsync(managerId);
         return MapClassificationToDto(overrideRow, manager);
     }
@@ -332,6 +359,63 @@ return MapClassificationToDto(classification, null);
                 DefaultPriority = c.DefaultPriority
             })
             .ToListAsync();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // UPLOAD ATTACHMENT  (Cloudinary, via IFileStorageService)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public async Task<AttachmentDto> UploadAttachmentAsync(Guid requestId, IFormFile file, Guid callerId)
+    {
+        var request = await _context.MaintenanceRequests
+            .FirstOrDefaultAsync(r => r.Id == requestId && !r.IsDeleted)
+            ?? throw new NotFoundException($"Request '{requestId}' was not found.");
+
+        if (request.RequesterId != callerId)
+            throw new ForbiddenException("Only the request's owner may attach photos.");
+
+        if (file == null || file.Length == 0)
+            throw new ValidationException("No file was provided.");
+
+        const long maxSizeBytes = 5 * 1024 * 1024;
+        if (file.Length > maxSizeBytes)
+            throw new ValidationException("File must be 5MB or smaller.");
+
+        var allowedTypes = new[] { "image/jpeg", "image/png", "image/jpg" };
+        if (!allowedTypes.Contains(file.ContentType))
+            throw new ValidationException("Only JPG and PNG images are allowed.");
+
+        string secureUrl;
+        try
+        {
+            using var stream = file.OpenReadStream();
+            secureUrl = await _fileStorage.UploadFileAsync(stream, file.FileName);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Photo upload failed for request {RequestId}", requestId);
+            throw new Exception("Photo upload failed. The request is still saved without the photo.");
+        }
+
+        var attachment = new RequestAttachment
+        {
+            MaintenanceRequestId = requestId,
+            SecureUrl = secureUrl,
+            PublicId = Guid.NewGuid().ToString(),
+            FileName = file.FileName,
+            ResourceType = "image"
+        };
+
+        _context.Set<RequestAttachment>().Add(attachment);
+        await _context.SaveChangesAsync();
+
+        return new AttachmentDto
+        {
+            Id = attachment.Id,
+            SecureUrl = attachment.SecureUrl,
+            FileName = attachment.FileName,
+            CreatedAt = attachment.CreatedAt
+        };
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -454,6 +538,12 @@ return MapClassificationToDto(classification, null);
             .AsNoTracking()
             .ToListAsync();
 
+        var attachments = await _context.Set<RequestAttachment>()
+            .Where(a => a.MaintenanceRequestId == id && !a.IsDeleted)
+            .OrderBy(a => a.CreatedAt)
+            .AsNoTracking()
+            .ToListAsync();
+
         return new RequestDetailDto
         {
             Id              = r.Id,
@@ -475,6 +565,15 @@ return MapClassificationToDto(classification, null);
             UpdatedAt       = r.UpdatedAt,
             Classifications = classifications
                 .Select(rc => MapClassificationToDto(rc, rc.OverriddenByUser))
+                .ToList(),
+            Attachments = attachments
+                .Select(a => new AttachmentDto
+                {
+                    Id         = a.Id,
+                    SecureUrl  = a.SecureUrl,
+                    FileName   = a.FileName,
+                    CreatedAt  = a.CreatedAt
+                })
                 .ToList()
         };
     }
@@ -489,6 +588,7 @@ return MapClassificationToDto(classification, null);
         AgentClassificationResponseDto? agent,
         List<string> validCategories,
         List<string> validSkills,
+        List<string> validAssets,
         Guid requestId)
     {
         const string FallbackCategory = "Uncategorized";
@@ -536,6 +636,16 @@ return MapClassificationToDto(classification, null);
             };
         }
 
+        // Detected asset is auxiliary: keep it only when it names a seeded Asset,
+        // otherwise drop it to null rather than invalidating the whole row.
+        var detectedAsset = agent.DetectedAsset?.Trim();
+
+        if (!string.IsNullOrEmpty(detectedAsset))
+        {
+            detectedAsset = validAssets
+                .FirstOrDefault(a => a.Equals(detectedAsset, StringComparison.OrdinalIgnoreCase));
+        }
+
         // All checks passed — persist the agent's output
         return new RequestClassification
         {
@@ -545,6 +655,7 @@ return MapClassificationToDto(classification, null);
             ConfidenceScore      = agent.ConfidenceScore,
             RequiresReview       = agent.RequiresReview,
             RequiredSkill        = skill,
+            DetectedAsset        = detectedAsset,
             Reason               = agent.Reason?.Trim(),
             IsOverride           = false
         };
@@ -561,6 +672,7 @@ return MapClassificationToDto(classification, null);
             RequiresReview       = rc.RequiresReview,
             RequiredSkill        = rc.RequiredSkill,
             Reason               = rc.Reason,
+            DetectedAsset        = rc.DetectedAsset,
             IsOverride           = rc.IsOverride,
             OverriddenByUserName = overrideUser != null
                 ? $"{overrideUser.FirstName} {overrideUser.LastName}"
