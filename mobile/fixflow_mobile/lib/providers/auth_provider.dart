@@ -10,6 +10,7 @@ class AuthProvider with ChangeNotifier {
 
   UserModel? _user;
   bool _isLoading = false;
+  bool _isRestoring = false;
   String? _error;
 
   AuthProvider({ApiClient? apiClient, SecureStorageService? storage})
@@ -18,6 +19,7 @@ class AuthProvider with ChangeNotifier {
 
   UserModel? get user => _user;
   bool get isLoading => _isLoading;
+  bool get isRestoring => _isRestoring;
   bool get isAuthenticated => _user != null;
   String? get error => _error;
 

@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../../providers/auth_provider.dart';
 
 import '../../screens/login_screen.dart';
 import '../../screens/home_screen.dart';
@@ -58,6 +60,15 @@ class AppRouter {
   // ============================================================
   static const String technicianHome = '/technician-home';
 
+  static String homeRouteFor(String role) {
+    switch (role.toLowerCase()) {
+      case 'technician':
+        return technicianHome;
+      case 'requester':
+      default:
+        return home;
+    }
+  }
 
   // ============================================================
   // MEMBER 4 ROUTE CONSTANTS — SCHEDULING & WORK ORDER MANAGEMENT
@@ -140,5 +151,59 @@ class AppRouter {
           ),
         );
     }
+  }
+}
+
+/// Mirrors React's <ProtectedRoute>:
+///   - unauthenticated user → login screen
+///   - authenticated user without an allowed role → their own home route
+/// Screens stay registered in the router — access is guarded, never removed.
+/// The backend [Authorize] attributes remain the authoritative check.
+class _RouteGuard extends StatefulWidget {
+  final Set<String>? allowedRoles; // null = any authenticated user
+  final Widget child;
+
+  const _RouteGuard({this.allowedRoles, required this.child});
+
+  @override
+  State<_RouteGuard> createState() => _RouteGuardState();
+}
+
+class _RouteGuardState extends State<_RouteGuard> {
+  bool _redirecting = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthProvider>();
+
+    String? redirect;
+    if (!auth.isAuthenticated) {
+      redirect = AppRouter.login;
+    } else if (auth.user == null || auth.user?.role == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    } else if (widget.allowedRoles != null &&
+        !widget.allowedRoles!.contains(auth.user!.role)) {
+      redirect = AppRouter.homeRouteFor(auth.user!.role);
+    }
+
+    if (redirect != null) {
+      if (!_redirecting) {
+        _redirecting = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            Navigator.of(context)
+                .pushNamedAndRemoveUntil(redirect!, (_) => false);
+          }
+        });
+      }
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    _redirecting = false;
+    return widget.child;
   }
 }
