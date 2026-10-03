@@ -1290,19 +1290,43 @@ class TestOrchestratorWorkflowAudit(unittest.TestCase):
             },
         )
 
+    def _full_pipeline_request(self) -> WorkflowExecutionRequest:
+        """Same critical facts, but routed through the integrated C1→C2→C3→C4 pipeline."""
+        priority_request = self._critical_request()
+        return WorkflowExecutionRequest(
+            request_id=priority_request.request_id,
+            workflow_type=WorkflowTypeEnum.FULL_PIPELINE,
+            input_context=dict(priority_request.input_context),
+        )
+
     def test_workflow_exposes_objective_plan_and_type(self):
         result = execute_workflow(self._critical_request())
         self.assertEqual(result.workflow_type, "Priority")
         self.assertIsNotNone(result.objective)
         self.assertIn("Component 2", result.objective)
-        self.assertEqual(len(result.plan), 4, "Plan must enumerate the four agent steps.")
+        self.assertEqual(
+            len(result.plan), 1,
+            "A Priority-only workflow must enumerate exactly the PriorityAgent step.")
+        self.assertIn("PriorityAgent", result.plan[0])
 
     def test_workflow_runs_distinct_agents(self):
+        """Priority-only executes PriorityAgent and nothing else, so an unrelated
+        agent cannot affect (or fail) a Component 2 execution."""
         result = execute_workflow(self._critical_request())
         names = [s.agent_name for s in result.steps]
-        for expected in ("ClassificationAgent", "PriorityAgent", "AssignmentAgent", "SchedulingAgent"):
-            self.assertIn(expected, names)
+        self.assertEqual(names, ["PriorityAgent"])
         self.assertEqual(len(set(names)), len(names), "Agent steps must be distinct.")
+
+    def test_full_pipeline_runs_all_four_distinct_agents(self):
+        """The integrated FullPipeline must still run C1 → C2 → C3 → C4 in order."""
+        result = execute_workflow(self._full_pipeline_request())
+        self.assertEqual(result.workflow_type, "FullPipeline")
+        names = [s.agent_name for s in result.steps]
+        self.assertEqual(
+            names,
+            ["ClassificationAgent", "PriorityAgent", "AssignmentAgent", "SchedulingAgent"],
+            "FullPipeline must run all four agents in pipeline order.")
+        self.assertEqual(len(result.plan), 4, "Plan must enumerate the four agent steps.")
 
     def test_priority_step_uses_only_allow_listed_tools(self):
         result = execute_workflow(self._critical_request())

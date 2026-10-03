@@ -10,6 +10,9 @@ import '../models/priority_assessment_model.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/priority_badge.dart';
 import '../widgets/escalation_action_button.dart';
+import '../widgets/agent_timeline_widget.dart';
+import '../widgets/explainable_assessment_widget.dart';
+import '../widgets/risk_gauge_widget.dart';
 
 class PriorityDetailsScreen extends StatefulWidget {
   final String? requestId;
@@ -1684,6 +1687,25 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                   const Divider(),
                   const SizedBox(height: 8),
 
+                  // Animated Risk Gauge. Displays the validated score only;
+                  // a safe failure persisted no score, so it is told to render
+                  // its unavailable state instead of a number.
+                  RiskGaugeWidget(
+                    riskScore: item.status.toUpperCase() == 'FAILED'
+                        ? null
+                        : item.riskScore,
+                    riskLevel: item.status.toUpperCase() == 'FAILED'
+                        ? null
+                        : item.riskLevel,
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // Explainable Risk & Priority Assessment.
+                  ExplainableAssessmentWidget(assessment: item),
+
+                  const SizedBox(height: 12),
+
                   SLAResponseCardWidget(
                     window:
                         item.recommendedResponseWindow,
@@ -1742,6 +1764,14 @@ class _PriorityDetailsScreenState extends State<PriorityDetailsScreen> {
                       ],
                     ),
                   ),
+
+                  const SizedBox(height: 14),
+                  const Divider(),
+                  const SizedBox(height: 8),
+
+                  // Agent Processing Timeline: the real persisted
+                  // AgentWorkflow / AgentStep records for this request.
+                  AgentTimelineWidget(requestId: item.requestId),
 
                   // Management Actions
                   if (canManage) ...[

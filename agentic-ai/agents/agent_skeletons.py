@@ -27,10 +27,10 @@ Risk level thresholds (authoritative):
 from agents.base_agent import BaseAgent
 from tools.domain_tools import ALLOW_LISTED_TOOLS
 from schemas.agent_schemas import ClassificationOutput, PriorityOutput, AssignmentOutput, ScheduleProposal
-from schemas.workflow_schemas import StepExecutionResult
+from schemas.workflow_schemas import StepExecutionResult, ToolCallLog
 from validators.deterministic_validator import DeterministicValidator
 from classification.classifier import classify_request
-from typing import Dict, Any
+from typing import Dict, Any, List
 import re
 
 
@@ -166,6 +166,42 @@ class PriorityAgent(BaseAgent):
         if score >= 26:
             return "Medium"
         return "Low"
+
+    def _safe_failure(
+        self,
+        tool_logs: List[ToolCallLog],
+        reason: str,
+        input_context: Dict[str, Any],
+    ) -> StepExecutionResult:
+        """
+        Structured failure for a required C2 tool failure.
+
+        A tool failure means the risk factors could not be gathered, so no
+        score/level/priority may be invented. The step is reported FAILED and
+        flagged for human review; ASP.NET refuses to persist it and records the
+        failed workflow state for auditability.
+        """
+        approval_reason = f"{reason} Flagged for downstream human review."
+        return StepExecutionResult(
+            agent_name=self.name,
+            step_name="Risk & Priority Assessment",
+            status="FAILED",
+            output_data={
+                "status": "FAILED",
+                "error": reason,
+                "approval_reason": approval_reason,
+                "explanation": approval_reason,
+                "human_approval_required": True,
+                "risk_score": None,
+                "risk_level": None,
+                "priority": None,
+                "priority_level": None,
+                "escalation_flag": False,
+                "request_id": input_context.get("request_id", ""),
+            },
+            validation_passed=False,
+            tool_calls=tool_logs,
+        )
 
     # -----------------------------------------------------------------------
     # run_step

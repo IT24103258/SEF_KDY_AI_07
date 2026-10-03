@@ -109,8 +109,13 @@ venv\Scripts\activate
 # On Linux/macOS:
 source venv/bin/activate
 pip install -r requirements.txt
-uvicorn workflows.orchestrator:app --reload --port 8000
+uvicorn main:app --reload --port 8000
 ```
+
+> Use `main:app` — it is the unified entry point exposing both `POST /api/classify`
+> (Component 1) and `POST /api/orchestrator/execute` (Component 2). Launching
+> `workflows.orchestrator:app` instead omits `/api/classify`, so the ASP.NET Core
+> `ClassificationAgentService` receives **404 Not Found**.
 
 ---
 

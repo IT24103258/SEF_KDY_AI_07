@@ -102,6 +102,37 @@ class ApiClient {
     if (response.statusCode >= 200 && response.statusCode < 300) {
       return data;
     }
-    throw AppException(data['message'] ?? 'An error occurred', response.statusCode);
+    throw AppException(_errorMessage(data), response.statusCode);
+  }
+
+  /// Failures arrive in two shapes: the FixFlow ApiResponse envelope
+  /// (`{ message, errors: [...] }`) and the ASP.NET ProblemDetails emitted by
+  /// FluentValidation auto-validation (`{ title, errors: { field: [...] } }`).
+  /// ProblemDetails has no `message`, so reading only that key discarded the
+  /// server's actual reason and left the UI showing "An error occurred".
+  static String _errorMessage(Map<String, dynamic> data) {
+    final message = data['message'];
+    if (message is String && message.trim().isNotEmpty) return message;
+
+    final errors = data['errors'];
+    if (errors is List) {
+      final texts =
+          errors.whereType<String>().where((e) => e.trim().isNotEmpty).toList();
+      if (texts.isNotEmpty) return texts.join(' • ');
+    } else if (errors is Map) {
+      final texts = <String>[];
+      for (final value in errors.values) {
+        if (value is List) {
+          texts.addAll(value.whereType<String>());
+        } else if (value is String && value.trim().isNotEmpty) {
+          texts.add(value);
+        }
+      }
+      if (texts.isNotEmpty) return texts.join(' • ');
+    }
+
+    final title = data['title'];
+    if (title is String && title.trim().isNotEmpty) return title;
+    return 'An error occurred';
   }
 }

@@ -33,5 +33,10 @@ cd agentic-ai
 python -m venv venv
 venv\Scripts\activate # Windows
 pip install -r requirements.txt
-uvicorn workflows.orchestrator:app --reload --port 8000
+uvicorn main:app --reload --port 8000
 ```
+
+> `main:app` is the unified entry point — it exposes `POST /api/classify`
+> (Component 1) *and* the orchestrator router's `POST /api/orchestrator/execute`
+> (Component 2). Starting `workflows.orchestrator:app` instead serves only the
+> orchestrator and the backend receives **404** from `/api/classify`.

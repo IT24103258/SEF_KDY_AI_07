@@ -1,19 +1,30 @@
 """
-FixFlow Agentic AI Service — Component 1: Request Intake & Classification
-FastAPI entry point.
+FixFlow Agentic AI Service — unified FastAPI entry point.
 
 Start with:
     uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 
-The C# ClassificationAgentService posts to POST /api/classify and expects
-the ClassifyResponse JSON shape defined in classification/schemas.py.
+This is the ONLY entry point that exposes every route the ASP.NET Core backend
+calls, because it composes the whole service:
+
+    POST /api/classify              ← Component 1 (ClassificationAgentService)
+    POST /api/orchestrator/execute  ← Component 2 (PriorityAgentService) via the
+                                       included orchestrator router
+    GET  /health
+
+Starting uvicorn with ``workflows.orchestrator:app`` instead serves only the
+orchestrator's own application object, which never had /api/classify registered
+on it — that is what produced the 404 seen by the C# ClassificationAgentService.
 """
-from workflows.orchestrator import router as orchestrator_router
 import sys
 import os
 
-# Allow imports from the agentic-ai root when running via uvicorn from any cwd
+# Allow imports from the agentic-ai root when running via uvicorn from any cwd.
+# This must run before the project imports below, otherwise ``uvicorn main:app``
+# only resolves them when the current directory already happens to be agentic-ai.
 sys.path.insert(0, os.path.dirname(__file__))
+
+from workflows.orchestrator import router as orchestrator_router
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware

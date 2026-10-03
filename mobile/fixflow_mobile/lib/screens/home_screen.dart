@@ -102,10 +102,18 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
             ] else if (role == 'Technician') ...[
-              // The technician's assigned jobs live in the card above.
-              const Text(
-                'Open "My Assigned Jobs" above to view and update your tasks.',
-                style: TextStyle(color: Colors.grey),
+              // Component 3 workflow stays exactly as it was: the assigned-jobs
+              // card above is the technician's entry point.
+              //
+              // Component 2 read-only view. Reuses the existing PriorityDetailsScreen
+              // and its existing any-authenticated route. That screen already gates
+              // every management action behind its own Manager/Administrator check,
+              // so a technician sees risk / priority / SLA / explainability but never
+              // Override, Escalate or De-escalate.
+              _QuickAction(
+                icon: Icons.shield_outlined,
+                label: 'Priority & Risk Information (Read-only)',
+                onTap: () => Navigator.pushNamed(context, AppRouter.priorityDetails),
               ),
             ] else ...[
               // Manager / Administrator workflow — classification review &
@@ -116,10 +124,12 @@ class HomeScreen extends StatelessWidget {
                 onTap: () => Navigator.pushNamed(context, AppRouter.requestQueue),
               ),
               _QuickAction(
-                icon: Icons.verified_outlined,
-                label: 'Risk & Priority Overview',
-                onTap: () => Navigator.pushNamed(context, AppRouter.riskMatrix),
+                icon: Icons.shield_outlined,
+                label: 'Priority & SLA Tracking',
+                onTap: () => Navigator.pushNamed(context, AppRouter.priorityDetails),
               ),
+              // The standalone Risk Matrix stays reachable from its tool card
+              // inside PriorityDetailsScreen, so it is not duplicated here.
             ],
           ],
         ),

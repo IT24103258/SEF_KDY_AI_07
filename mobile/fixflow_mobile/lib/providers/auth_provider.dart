@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/constants/api_constants.dart';
+import '../core/errors/app_exception.dart';
 import '../core/network/api_client.dart';
 import '../core/storage/secure_storage_service.dart';
 import '../models/user_model.dart';
@@ -53,6 +54,14 @@ class AuthProvider with ChangeNotifier {
     }
   }
 
+  /// AppException already carries the server's message verbatim. Anything else
+  /// is a transport failure, whose toString() is a raw ClientException /
+  /// SocketException description that is useless to an end user.
+  static String _describeError(Object error) {
+    if (error is AppException) return error.message;
+    return 'Cannot reach the FixFlow API. Check your connection and try again.';
+  }
+
   Future<bool> login(String email, String password) async {
     _isLoading = true;
     _error = null;
@@ -72,8 +81,9 @@ class AuthProvider with ChangeNotifier {
         notifyListeners();
         return true;
       }
+      _error = res['message']?.toString() ?? 'Sign in failed. Please try again.';
     } catch (e) {
-      _error = e.toString();
+      _error = _describeError(e);
     }
 
     _isLoading = false;
@@ -109,7 +119,7 @@ class AuthProvider with ChangeNotifier {
       // Auto-login with the credentials just registered (same as React)
       return await login(email, password);
     } catch (e) {
-      _error = e.toString().replaceFirst('AppException: ', '');
+      _error = _describeError(e);
       _isLoading = false;
       notifyListeners();
       return false;

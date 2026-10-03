@@ -82,16 +82,30 @@ def test_assignment_agent_only(request: StandaloneAssignmentRequest):
 # ============================================================
 
 # ---------------------------------------------------------------------------
-# Shared, auditable planning metadata. The orchestrator always executes the
-# full agent pipeline; the objective/plan make the workflow's intent explicit
-# and are persisted by the ASP.NET layer for auditability.
+# Shared, auditable planning metadata. Each workflow type declares the ordered
+# agent steps it actually executes, and the plan enumerates exactly those steps
+# so the persisted audit trail never claims work that was not performed.
+#
+#   FullPipeline   → the integrated C1 → C2 → C3 → C4 application workflow.
+#   Priority       → PriorityAgent only, so Component 2 can be tested/re-run
+#                    without unrelated agents executing or affecting its result.
 # ---------------------------------------------------------------------------
-_PLAN = [
-    "1. ClassificationAgent — intake & classify the raw request facts.",
-    "2. PriorityAgent — deterministically assess risk & priority (Component 2).",
-    "3. AssignmentAgent — match technician skills to the classified request.",
-    "4. SchedulingAgent — propose a conflict-free work-order schedule.",
-]
+_STEP_PLAN = {
+    "Classification": "ClassificationAgent — intake & classify the raw request facts.",
+    "Priority": "PriorityAgent — deterministically assess risk & priority (Component 2).",
+    "Assignment": "AssignmentAgent — match technician skills to the classified request.",
+    "Scheduling": "SchedulingAgent — propose a conflict-free work-order schedule.",
+}
+
+_FULL_PIPELINE = ["Classification", "Priority", "Assignment", "Scheduling"]
+
+_WORKFLOW_STEPS = {
+    "FullPipeline": _FULL_PIPELINE,
+    "Classification": ["Classification"],
+    "Priority": ["Priority"],
+    "Assignment": ["Assignment"],
+    "Scheduling": ["Scheduling"],
+}
 
 _OBJECTIVES = {
     "FullPipeline": "Run the full FixFlow multi-agent pipeline: classify, assess risk & priority, assign a technician, and schedule the work order.",
@@ -111,57 +125,77 @@ def execute_workflow(request: WorkflowExecutionRequest):
     # ============================================================
     # SHARED — Objective & structured plan (auditable).
     # Additive metadata: every workflow declares its objective and the
-    # ordered plan of agent steps the pipeline will execute.
+    # ordered plan of the agent steps it will execute.
     # ============================================================
     workflow_type = getattr(request.workflow_type, "value", str(request.workflow_type))
     objective = _OBJECTIVES.get(workflow_type, _OBJECTIVES["FullPipeline"])
-    plan = list(_PLAN)
+    selected_steps = _WORKFLOW_STEPS.get(workflow_type, _FULL_PIPELINE)
+    plan = [f"{i}. {_STEP_PLAN[name]}" for i, name in enumerate(selected_steps, start=1)]
+
+    step1_result = None
+    step2_result = None
+    step3_result = None
 
     # ============================================================
     # MEMBER 1 — REQUEST INTAKE & CLASSIFICATION AGENT STEP
     # ============================================================
-    classification_agent = ClassificationAgent()
-    step1_result = classification_agent.run_step(request.input_context)
-    steps.append(step1_result)
+    if "Classification" in selected_steps:
+        classification_agent = ClassificationAgent()
+        step1_result = classification_agent.run_step(request.input_context)
+        steps.append(step1_result)
 
-    if step1_result.status == "REQUIRES_HUMAN_APPROVAL":
-        requires_approval = True
-        approval_reason = "Member 1 Classification Agent triggered human review threshold."
+        if step1_result.status == "REQUIRES_HUMAN_APPROVAL":
+            requires_approval = True
+            approval_reason = "Member 1 Classification Agent triggered human review threshold."
 
     # Member 2 — Risk & Priority Assessment Agent Step
-    priority_agent = PriorityAgent()
-    step2_result = priority_agent.run_step({**request.input_context, **step1_result.output_data})
-    steps.append(step2_result)
+    if "Priority" in selected_steps:
+        priority_context = dict(request.input_context)
+        if step1_result is not None:
+            priority_context.update(step1_result.output_data)
 
-    if step2_result.status == "REQUIRES_HUMAN_APPROVAL":
-        requires_approval = True
-        approval_reason = "Member 2 Priority Agent triggered critical risk approval."
-    elif step2_result.status == "FAILED":
-        # Safe failure: a tool failure or invalid assessment must be flagged for
-        # downstream human review, never silently completed.
-        requires_approval = True
-        approval_reason = (
-            "Member 2 Priority Agent safe-failure (tool failure or invalid assessment). "
-            "Flagged for downstream human review."
-        )
+        priority_agent = PriorityAgent()
+        step2_result = priority_agent.run_step(priority_context)
+        steps.append(step2_result)
+
+        if step2_result.status == "REQUIRES_HUMAN_APPROVAL":
+            requires_approval = True
+            approval_reason = "Member 2 Priority Agent triggered critical risk approval."
+        elif step2_result.status == "FAILED":
+            # Safe failure: a tool failure or invalid assessment must be flagged for
+            # downstream human review, never silently completed.
+            requires_approval = True
+            approval_reason = (
+                "Member 2 Priority Agent safe-failure (tool failure or invalid assessment). "
+                "Flagged for downstream human review."
+            )
 
     # Member 3 — Technician Matching & Assignment Agent Step
-    assignment_agent = AssignmentAgent()
-    step3_result = assignment_agent.run_step({
-        "request_id": request.request_id,
-        "required_skill": step1_result.output_data.get("required_skill", "General"),#previously was category, but now we are using required_skill for better matching
-        "priority": step2_result.output_data.get("priority_level", "Normal")
-    })
-    steps.append(step3_result)
+    if "Assignment" in selected_steps:
+        assignment_context = dict(request.input_context)
+        assignment_context["request_id"] = request.request_id
+        if step1_result is not None:
+            assignment_context["required_skill"] = step1_result.output_data.get("required_skill", "General")#previously was category, but now we are using required_skill for better matching
+        if step2_result is not None:
+            assignment_context["priority"] = step2_result.output_data.get("priority_level", "Normal")
+
+        assignment_agent = AssignmentAgent()
+        step3_result = assignment_agent.run_step(assignment_context)
+        steps.append(step3_result)
 
     # Member 4 — Scheduling & Work Order Management Agent Step
-    scheduling_agent = SchedulingAgent()
-    step4_result = scheduling_agent.run_step({
-        "request_id": request.request_id,
-        "assigned_technician_id": step3_result.output_data.get("top_match_id")
-    })
-    steps.append(step4_result)
+    if "Scheduling" in selected_steps:
+        scheduling_context = dict(request.input_context)
+        scheduling_context["request_id"] = request.request_id
+        if step3_result is not None:
+            scheduling_context["assigned_technician_id"] = step3_result.output_data.get("top_match_id")
 
+        scheduling_agent = SchedulingAgent()
+        step4_result = scheduling_agent.run_step(scheduling_context)
+        steps.append(step4_result)
+
+    # The workflow result is derived only from the agents this workflow type
+    # actually executed, so an unrelated agent can never affect it.
     final_status = "WAITING_FOR_HUMAN_APPROVAL" if requires_approval else "COMPLETED"
 
     return WorkflowExecutionResult(

@@ -21,6 +21,10 @@ class PriorityAssessmentModel {
   final bool humanApprovalRequired;
   final bool hazardDetected;
 
+  /// Deterministic factors computed and persisted by the C# PriorityAssessmentService.
+  /// Null when the backend did not include them — never synthesized on the client.
+  final ContributingFactors? contributingFactors;
+
   PriorityAssessmentModel({
     required this.id,
     required this.requestId,
@@ -43,9 +47,11 @@ class PriorityAssessmentModel {
     required this.status,
     this.humanApprovalRequired = false,
     this.hazardDetected = false,
+    this.contributingFactors,
   });
 
   factory PriorityAssessmentModel.fromJson(Map<String, dynamic> json) {
+    final factors = json['contributingFactors'];
     return PriorityAssessmentModel(
       id: json['id'] ?? '',
       requestId: json['requestId'] ?? '',
@@ -68,6 +74,64 @@ class PriorityAssessmentModel {
       status: json['status'] ?? 'Active',
       humanApprovalRequired: json['humanApprovalRequired'] ?? false,
       hazardDetected: json['hazardDetected'] ?? false,
+      contributingFactors: factors is Map<String, dynamic>
+          ? ContributingFactors.fromJson(factors)
+          : null,
     );
+  }
+}
+
+/// Read-only mirror of the backend `ContributingFactorsDto`.
+///
+/// Every field is nullable on purpose: a factor the backend did not report must
+/// render as unavailable rather than being defaulted to a plausible-looking 0,
+/// which would misrepresent the authoritative assessment.
+class ContributingFactors {
+  final String? assetCriticality;
+  final int? baseMatrixScore;
+  final int? assetCriticalityScore;
+  final int? impactScore;
+  final int? likelihoodScore;
+  final bool? hasSafetyHazard;
+  final int? safetyHazardModifier;
+  final int? recurrenceModifier;
+  final int? locationModifier;
+  final int? recentFailureCount;
+  final String? operationalDisruption;
+
+  const ContributingFactors({
+    this.assetCriticality,
+    this.baseMatrixScore,
+    this.assetCriticalityScore,
+    this.impactScore,
+    this.likelihoodScore,
+    this.hasSafetyHazard,
+    this.safetyHazardModifier,
+    this.recurrenceModifier,
+    this.locationModifier,
+    this.recentFailureCount,
+    this.operationalDisruption,
+  });
+
+  factory ContributingFactors.fromJson(Map<String, dynamic> json) {
+    return ContributingFactors(
+      assetCriticality: json['assetCriticality'] as String?,
+      baseMatrixScore: _asInt(json['baseMatrixScore']),
+      assetCriticalityScore: _asInt(json['assetCriticalityScore']),
+      impactScore: _asInt(json['impactScore']),
+      likelihoodScore: _asInt(json['likelihoodScore']),
+      hasSafetyHazard: json['hasSafetyHazard'] as bool?,
+      safetyHazardModifier: _asInt(json['safetyHazardModifier']),
+      recurrenceModifier: _asInt(json['recurrenceModifier']),
+      locationModifier: _asInt(json['locationModifier']),
+      recentFailureCount: _asInt(json['recentFailureCount']),
+      operationalDisruption: json['operationalDisruption'] as String?,
+    );
+  }
+
+  static int? _asInt(Object? value) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    return null;
   }
 }
