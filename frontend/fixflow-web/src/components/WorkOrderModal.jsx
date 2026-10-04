@@ -17,6 +17,14 @@ const JOB_TITLES = [
   'General Maintenance'
 ];
 
+function toDatetimeLocalValue(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  if (isNaN(d.getTime())) return isoString.slice(0, 16);
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) => {
   const isEditing = !!workOrder;
 
@@ -48,8 +56,8 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
         setPriority(workOrder.priority || 'Medium');
         setTechnicianId(workOrder.technicianId || '');
         setLocationId(workOrder.locationId || '');
-        setScheduledStartTime(workOrder.scheduledStartTime ? workOrder.scheduledStartTime.slice(0, 16) : '');
-        setScheduledEndTime(workOrder.scheduledEndTime ? workOrder.scheduledEndTime.slice(0, 16) : '');
+        setScheduledStartTime(workOrder.scheduledStartTime ? toDatetimeLocalValue(workOrder.scheduledStartTime) : '');
+        setScheduledEndTime(workOrder.scheduledEndTime ? toDatetimeLocalValue(workOrder.scheduledEndTime) : '');
         setEstimatedDurationMinutes(workOrder.estimatedDurationMinutes || 60);
       } else {
         resetForm();
@@ -422,17 +430,17 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
             </div>
           </div>
 
-          {/* Scheduled Start and End */}
+          {/* Requested Start and End */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.5rem' }}>
             <Input
-              label="Scheduled Start"
+              label="Requested Start"
               type="datetime-local"
               value={scheduledStartTime}
               onChange={(e) => setScheduledStartTime(e.target.value)}
             />
 
             <Input
-              label="Scheduled End"
+              label="Requested End"
               type="datetime-local"
               value={scheduledEndTime}
               onChange={(e) => setScheduledEndTime(e.target.value)}

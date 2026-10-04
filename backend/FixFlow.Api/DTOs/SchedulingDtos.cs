@@ -17,6 +17,8 @@ public class ScheduleProposalDto
     public Guid RequestId { get; set; }
     public Guid TechnicianId { get; set; }
     public string TechnicianName { get; set; } = string.Empty;
+    public DateTime RequestedStart { get; set; }
+    public DateTime RequestedEnd { get; set; }
     public DateTime ProposedStart { get; set; }
     public DateTime ProposedEnd { get; set; }
     public int EstimatedDurationMinutes { get; set; }

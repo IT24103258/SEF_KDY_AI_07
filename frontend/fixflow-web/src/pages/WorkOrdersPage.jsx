@@ -329,6 +329,11 @@ export const WorkOrdersPage = () => {
                       <td style={{ padding: '12px 16px', color: 'var(--text-secondary)', fontSize: '0.82rem' }}>
                         {wo.scheduledStartTime ? (
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            {(wo.status === 'PendingManagerApproval' || wo.status === 'Proposed') && (
+                              <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#3b82f6', marginBottom: '2px' }}>
+                                Proposed:
+                              </span>
+                            )}
                             <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
                               {new Date(wo.scheduledStartTime).toLocaleDateString()}
                             </span>

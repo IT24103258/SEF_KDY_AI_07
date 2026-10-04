@@ -26,6 +26,8 @@ public class WorkOrderDto
     public string Priority { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
 
+    public DateTime? RequestedStartTime { get; set; }
+    public DateTime? RequestedEndTime { get; set; }
     public DateTime? ScheduledStartTime { get; set; }
     public DateTime? ScheduledEndTime { get; set; }
     public int EstimatedDurationMinutes { get; set; }
@@ -65,6 +67,8 @@ public class WorkOrderSummaryDto
     public string LocationName { get; set; } = string.Empty;
     public string Priority { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
+    public DateTime? RequestedStartTime { get; set; }
+    public DateTime? RequestedEndTime { get; set; }
     public DateTime? ScheduledStartTime { get; set; }
     public DateTime? ScheduledEndTime { get; set; }
     public int EstimatedDurationMinutes { get; set; }

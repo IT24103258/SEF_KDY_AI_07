@@ -237,6 +237,9 @@ public class SchedulingService : ISchedulingService
         var durationMinutes = request.EstimatedDurationMinutes > 0 ? request.EstimatedDurationMinutes : 60;
         await EnsureDefaultBusinessHoursAsync();
 
+        var requestedStart = request.PreferredStartTime.HasValue ? NormalizeToUtc(request.PreferredStartTime.Value) : (DateTime?)null;
+        var requestedEnd = requestedStart.HasValue ? requestedStart.Value.AddMinutes(durationMinutes) : (DateTime?)null;
+
         // 0. Python Scheduling Agent invocation (if available)
         PythonSchedulingResult? pythonResult = null;
         bool pythonAgentCalled = false;
@@ -254,7 +257,7 @@ public class SchedulingService : ISchedulingService
         }
 
         // 1. Candidate Slot Search Strategy
-        var proposedStart = DateTime.UtcNow.Date.AddDays(1).AddHours(9);
+        var proposedStart = requestedStart ?? DateTime.UtcNow;
         var proposedEnd = proposedStart.AddMinutes(durationMinutes);
         bool slotFound = false;
         bool conflictDetected = false;
@@ -319,39 +322,56 @@ public class SchedulingService : ISchedulingService
 
         if (!slotFound)
         {
-            // Search for earliest valid conflict-free slot within business hours
-            var searchBase = DateTime.UtcNow.AddMinutes(30);
+            // Search for earliest valid conflict-free slot within business hours, anchored to the requested start
+            var tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Colombo");
+            var searchAnchorUtc = requestedStart ?? DateTime.UtcNow;
+            var searchBaseLocal = TimeZoneInfo.ConvertTimeFromUtc(
+                searchAnchorUtc.Kind != DateTimeKind.Utc ? searchAnchorUtc.ToUniversalTime() : searchAnchorUtc, tz);
             var maxSearchDays = 7;
 
             for (int dayOffset = 0; dayOffset < maxSearchDays && !slotFound; dayOffset++)
             {
-                var checkDate = searchBase.Date.AddDays(dayOffset);
-                var dayOfWeek = (int)checkDate.DayOfWeek;
+                var checkDateLocal = searchBaseLocal.Date.AddDays(dayOffset);
+                var dayOfWeek = (int)checkDateLocal.DayOfWeek;
                 var bh = await _context.Set<BusinessHours>().FirstOrDefaultAsync(b => b.DayOfWeek == dayOfWeek);
 
                 if (bh == null || !bh.IsWorkingDay) continue;
 
-                var dayOpen = checkDate.Add(bh.OpenTime);
-                var dayClose = checkDate.Add(bh.CloseTime);
+                var dayOpenLocal = checkDateLocal.Add(bh.OpenTime);
+                var dayCloseLocal = checkDateLocal.Add(bh.CloseTime);
 
-                var startSearchTime = (dayOffset == 0 && searchBase > dayOpen)
-                    ? new DateTime(checkDate.Year, checkDate.Month, checkDate.Day, searchBase.Hour, (searchBase.Minute / 30) * 30, 0, DateTimeKind.Utc).AddMinutes(30)
-                    : dayOpen;
-
-                while (startSearchTime.AddMinutes(durationMinutes) <= dayClose)
+                DateTime startSearchLocal;
+                if (dayOffset == 0 && searchBaseLocal > dayOpenLocal)
                 {
-                    var endSearchTime = startSearchTime.AddMinutes(durationMinutes);
+                    var snappedMinutes = (searchBaseLocal.Minute / 30) * 30;
+                    startSearchLocal = new DateTime(checkDateLocal.Year, checkDateLocal.Month, checkDateLocal.Day,
+                        searchBaseLocal.Hour, snappedMinutes, 0, DateTimeKind.Unspecified);
+                    if (startSearchLocal < searchBaseLocal)
+                        startSearchLocal = startSearchLocal.AddMinutes(30);
+                }
+                else
+                {
+                    startSearchLocal = dayOpenLocal;
+                }
 
-                    var slotVal = await ValidateScheduleAsync(technician.Id, startSearchTime, endSearchTime, durationMinutes, request.Priority, slaDeadline);
+                while (startSearchLocal.AddMinutes(durationMinutes) <= dayCloseLocal)
+                {
+                    var endSearchLocal = startSearchLocal.AddMinutes(durationMinutes);
+                    var startSearchUtc = TimeZoneInfo.ConvertTimeToUtc(
+                        DateTime.SpecifyKind(startSearchLocal, DateTimeKind.Unspecified), tz);
+                    var endSearchUtc = TimeZoneInfo.ConvertTimeToUtc(
+                        DateTime.SpecifyKind(endSearchLocal, DateTimeKind.Unspecified), tz);
+
+                    var slotVal = await ValidateScheduleAsync(technician.Id, startSearchUtc, endSearchUtc, durationMinutes, request.Priority, slaDeadline);
                     if (slotVal.IsValid)
                     {
-                        proposedStart = startSearchTime;
-                        proposedEnd = endSearchTime;
+                        proposedStart = startSearchUtc;
+                        proposedEnd = endSearchUtc;
                         slotFound = true;
                         break;
                     }
 
-                    startSearchTime = startSearchTime.AddMinutes(30);
+                    startSearchLocal = startSearchLocal.AddMinutes(30);
                 }
             }
         }
@@ -360,7 +380,22 @@ public class SchedulingService : ISchedulingService
         {
             // Safe Failure / Escalation Scenario: No slot found before SLA or in next 7 days
             conflictDetected = true;
-            proposedStart = DateTime.UtcNow.AddDays(1).Date.AddHours(9);
+            var fallbackTz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Colombo");
+            var fallbackAnchorUtc = requestedStart ?? DateTime.UtcNow;
+            var fallbackAnchorLocal = TimeZoneInfo.ConvertTimeFromUtc(
+                fallbackAnchorUtc.Kind != DateTimeKind.Utc ? fallbackAnchorUtc.ToUniversalTime() : fallbackAnchorUtc, fallbackTz);
+            var fallbackStartLocal = fallbackAnchorLocal.Date.AddDays(1);
+            for (int fbDay = 0; fbDay < 7; fbDay++)
+            {
+                var fbDate = fallbackAnchorLocal.Date.AddDays(fbDay + 1);
+                var fbh = await _context.Set<BusinessHours>().FirstOrDefaultAsync(b => b.DayOfWeek == (int)fbDate.DayOfWeek);
+                if (fbh != null && fbh.IsWorkingDay)
+                {
+                    fallbackStartLocal = fbDate.Add(fbh.OpenTime);
+                    break;
+                }
+            }
+            proposedStart = TimeZoneInfo.ConvertTimeToUtc(DateTime.SpecifyKind(fallbackStartLocal, DateTimeKind.Unspecified), fallbackTz);
             proposedEnd = proposedStart.AddMinutes(durationMinutes);
             conflictDetails.Add(new ConflictDetailDto
             {
@@ -452,6 +487,8 @@ public class SchedulingService : ISchedulingService
             WorkOrderId = workOrder.Id,
             RequestId = maintenanceRequest.Id,
             TechnicianId = technician.Id,
+            RequestedStartTime = requestedStart ?? proposedStart,
+            RequestedEndTime = requestedEnd ?? proposedEnd,
             ProposedStartTime = proposedStart,
             ProposedEndTime = proposedEnd,
             EstimatedDurationMinutes = durationMinutes,
@@ -681,6 +718,8 @@ public class SchedulingService : ISchedulingService
             RequestId = maintenanceRequest.Id,
             TechnicianId = technician.Id,
             TechnicianName = $"{technician.User?.FirstName} {technician.User?.LastName}",
+            RequestedStart = requestedStart ?? proposedStart,
+            RequestedEnd = requestedEnd ?? proposedEnd,
             ProposedStart = proposedStart,
             ProposedEnd = proposedEnd,
             EstimatedDurationMinutes = durationMinutes,

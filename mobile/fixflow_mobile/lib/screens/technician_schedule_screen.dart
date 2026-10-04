@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../core/routes/app_router.dart';
+import '../core/theme/app_colors.dart';
 import '../models/work_order_model.dart';
 import '../providers/work_order_provider.dart';
 import '../widgets/app_top_bar.dart';
@@ -57,6 +59,7 @@ class _TechnicianScheduleScreenState extends State<TechnicianScheduleScreen> {
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<WorkOrderProvider>();
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final groupedJobs = _groupJobsByDate(provider.scheduleJobs);
     final sortedDates = groupedJobs.keys.toList()
@@ -74,6 +77,71 @@ class _TechnicianScheduleScreenState extends State<TechnicianScheduleScreen> {
         onRefresh: provider.fetchSchedule,
         child: Column(
           children: [
+            // Date Filter Bar
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(8),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: provider.selectedDate,
+                          firstDate: DateTime(2024),
+                          lastDate: DateTime(2030),
+                        );
+                        if (picked != null) {
+                          provider.setSelectedDate(picked);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          border: Border.all(
+                              color: isDark
+                                  ? AppColors.darkBorder
+                                  : AppColors.lightBorder),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.calendar_today_outlined,
+                                size: 14,
+                                color: isDark
+                                    ? AppColors.darkTextMuted
+                                    : AppColors.lightTextMuted),
+                            const SizedBox(width: 8),
+                            Text(
+                              DateFormat('EEE, MMM d, yyyy')
+                                  .format(provider.selectedDate),
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: isDark
+                                    ? AppColors.darkTextPrimary
+                                    : AppColors.lightTextPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton.icon(
+                    onPressed: () {
+                      provider.setSelectedDate(DateTime.now());
+                    },
+                    icon: const Icon(Icons.today, size: 16),
+                    label: const Text('Today',
+                        style: TextStyle(fontSize: 12)),
+                  ),
+                ],
+              ),
+            ),
             // Job List or States
             Expanded(
               child: provider.isLoading && provider.scheduleJobs.isEmpty

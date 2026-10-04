@@ -142,6 +142,8 @@ export const ApprovalCenterPage = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
           {proposals.map((wo) => {
             const isConflict = wo.conflictDetected;
+            const isOutsideBH = wo.validationChecklist && wo.validationChecklist.businessHoursValid === false;
+            const needsAttention = isConflict || isOutsideBH;
             const comments = managerComments[wo.id] || '';
             const isLoading = actionLoading[wo.id];
 
@@ -149,8 +151,8 @@ export const ApprovalCenterPage = () => {
               <Card
                 key={wo.id}
                 style={{
-                  border: isConflict ? '1px solid var(--danger-color)' : '1px solid var(--border-color)',
-                  boxShadow: isConflict ? '0 0 12px rgba(255, 107, 113, 0.15)' : 'none'
+                  border: needsAttention ? `1px solid ${isConflict ? 'var(--danger-color)' : 'var(--warning-color)'}` : '1px solid var(--border-color)',
+                  boxShadow: needsAttention ? `0 0 12px ${isConflict ? 'rgba(255, 107, 113, 0.15)' : 'rgba(251, 191, 36, 0.15)'}` : 'none'
                 }}
               >
                 {/* Header info */}
@@ -202,7 +204,7 @@ export const ApprovalCenterPage = () => {
                   </div>
                 </div>
 
-                {/* Conflict Banner if detected */}
+                {/* Conflict Banner */}
                 {isConflict && (
                   <div
                     style={{
@@ -220,8 +222,32 @@ export const ApprovalCenterPage = () => {
                   >
                     <AlertTriangle size={20} />
                     <div>
-                      <strong>Schedule Conflict Detected:</strong> Existing booking overlaps with proposed time slot.
-                      Review validation details or request revision with an alternative window.
+                      <strong>Schedule Conflict Detected:</strong> Existing booking overlaps with requested time slot.
+                      AI has proposed an alternative window. Review validation details or request revision.
+                    </div>
+                  </div>
+                )}
+
+                {/* Outside Business Hours Banner */}
+                {wo.validationChecklist && wo.validationChecklist.businessHoursValid === false && !isConflict && (
+                  <div
+                    style={{
+                      padding: '0.85rem 1rem',
+                      borderRadius: '8px',
+                      backgroundColor: 'rgba(251, 191, 36, 0.12)',
+                      border: '1px solid var(--warning-color)',
+                      color: 'var(--warning-color)',
+                      marginBottom: '1.25rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      fontSize: '0.88rem'
+                    }}
+                  >
+                    <Clock size={20} />
+                    <div>
+                      <strong>Outside Business Hours:</strong> Requested time falls outside operational hours.
+                      AI has proposed the next valid operational slot for Manager approval.
                     </div>
                   </div>
                 )}
@@ -252,9 +278,21 @@ export const ApprovalCenterPage = () => {
                         <span style={{ color: 'var(--text-secondary)' }}>Assigned Tech: </span>
                         <strong style={{ color: 'var(--text-primary)' }}>{wo.technicianName}</strong>
                       </div>
+                      {wo.requestedStartTime && (
+                        <div>
+                          <span style={{ color: 'var(--text-secondary)' }}>Requested Time: </span>
+                          <strong style={{ textDecoration: wo.requestedStartTime !== wo.scheduledStartTime ? 'line-through' : 'none', opacity: wo.requestedStartTime !== wo.scheduledStartTime ? 0.6 : 1 }}>
+                            {new Date(wo.requestedStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            {' '}({new Date(wo.requestedStartTime).toLocaleDateString()})
+                          </strong>
+                        </div>
+                      )}
                       <div>
-                        <span style={{ color: 'var(--text-secondary)' }}>Proposed Start: </span>
-                        <strong>{wo.scheduledStartTime ? new Date(wo.scheduledStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '09:00'} ({wo.scheduledStartTime ? new Date(wo.scheduledStartTime).toLocaleDateString() : 'Today'})</strong>
+                        <span style={{ color: 'var(--text-secondary)' }}>AI Proposed: </span>
+                        <strong>
+                          {wo.scheduledStartTime ? new Date(wo.scheduledStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '09:00'}
+                          {' '}({wo.scheduledStartTime ? new Date(wo.scheduledStartTime).toLocaleDateString() : 'Today'})
+                        </strong>
                       </div>
                       <div>
                         <span style={{ color: 'var(--text-secondary)' }}>Estimated Duration: </span>
@@ -276,14 +314,17 @@ export const ApprovalCenterPage = () => {
                       Validation Checks
                     </div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '5px', fontSize: '0.8rem' }}>
-                      {[
-                        { label: 'Technician availability', passed: true },
-                        { label: 'Existing bookings checked', passed: true },
-                        { label: 'SLA requirement', passed: true },
-                        { label: 'Schedule conflict', passed: !isConflict },
-                        { label: 'Business hours', passed: true },
-                        { label: 'Required skill', passed: true }
-                      ].map((check, idx) => (
+                      {(() => {
+                        const vc = wo.validationChecklist;
+                        return [
+                          { label: 'Technician availability', passed: vc ? vc.technicianAvailable : true },
+                          { label: 'Existing bookings checked', passed: vc ? vc.existingBookingsChecked : true },
+                          { label: 'SLA requirement', passed: vc ? vc.slaRequirementPassed : true },
+                          { label: 'Schedule conflict', passed: vc ? vc.scheduleConflictNone : !isConflict },
+                          { label: 'Business hours', passed: vc ? vc.businessHoursValid : true },
+                          { label: 'Required skill', passed: vc ? vc.requiredSkillValid : true }
+                        ];
+                      })().map((check, idx) => (
                         <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                           <span style={{ color: 'var(--text-secondary)' }}>{check.label}:</span>
                           <span style={{ color: check.passed ? 'var(--success-color)' : 'var(--danger-color)', display: 'inline-flex', alignItems: 'center', gap: '3px', fontWeight: 600 }}>

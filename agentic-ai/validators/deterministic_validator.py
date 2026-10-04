@@ -178,8 +178,20 @@ class DeterministicValidator:
             if is_critical or has_escalation:
                 return True, "Critical risk/priority or escalation flag detected. Human manager sign-off required."
         elif agent_name == "SchedulingAgent":
-            # Mandatory manager approval gate for all work-order schedule proposals
-            return True, "Work order schedule proposal requires Manager sign-off before dispatch."
+            # Conditional manager approval: only for conflict, outside business hours, or critical priority
+            has_conflict = output_data.get("conflict_detected") is True or output_data.get("is_conflict_free") is False
+            outside_hours = output_data.get("within_business_hours") is False
+            priority = output_data.get("priority") or output_data.get("priority_level") or ""
+            is_critical = priority.lower() == "critical"
+
+            if has_conflict:
+                return True, "Schedule conflict detected. Manager sign-off required for alternative slot review."
+            if outside_hours:
+                return True, "Requested time is outside operational business hours. Manager approval required."
+            if is_critical:
+                return True, "Critical priority work order requires Manager sign-off before scheduling."
+
+            return False, ""
         
         return False, ""
 

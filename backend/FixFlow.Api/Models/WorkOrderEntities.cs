@@ -99,6 +99,8 @@ public class ScheduleProposal : BaseEntity
     public Guid TechnicianId { get; set; }
     public Technician? Technician { get; set; }
 
+    public DateTime RequestedStartTime { get; set; }
+    public DateTime RequestedEndTime { get; set; }
     public DateTime ProposedStartTime { get; set; }
     public DateTime ProposedEndTime { get; set; }
     public int EstimatedDurationMinutes { get; set; }

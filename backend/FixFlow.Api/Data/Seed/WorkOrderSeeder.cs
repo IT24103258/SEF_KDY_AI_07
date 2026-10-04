@@ -67,16 +67,9 @@ public static class WorkOrderSeeder
             var secondTech = await context.Technicians.Include(t => t.User).OrderByDescending(t => t.Id).FirstAsync();
             var manager = await context.Users.FirstAsync(u => u.Email == "manager@fixflow.local");
             var requester = await context.Users.FirstAsync(u => u.Email == "requester@fixflow.local");
-            var locationTower = await context.Locations.FirstOrDefaultAsync(l => l.Building == "Tower");
-            var locationBlockA = await context.Locations.FirstOrDefaultAsync(l => l.Building == "Block A");
-            var locationBlockB = await context.Locations.FirstOrDefaultAsync(l => l.Building == "Block B");
-            var locationLibrary = await context.Locations.FirstOrDefaultAsync(l => l.Building == "Library");
-
-            var fallbackLocation = await context.Locations.FirstAsync();
-
-            var locationTowerA = locationTower ?? fallbackLocation;
-            var locationTowerB = locationBlockB ?? fallbackLocation;
-            var locationCommon = locationLibrary ?? fallbackLocation;
+            var locationTowerA = await context.Locations.FirstAsync(l => l.Building == "Tower A");
+            var locationTowerB = await context.Locations.FirstAsync(l => l.Building == "Tower B");
+            var locationCommon = await context.Locations.FirstAsync(l => l.Building == "Common Areas");
             
             var existingReq = await context.MaintenanceRequests.FirstAsync();
 

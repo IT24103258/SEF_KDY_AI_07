@@ -105,6 +105,47 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
     return fileKey;
   }
 
+  Future<String?> _showPauseDialog() async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Pause Job'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Provide a reason for pausing this job:',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              decoration: const InputDecoration(
+                hintText: 'e.g. Waiting for parts, customer not available...',
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () =>
+                Navigator.pop(ctx, controller.text.isNotEmpty ? controller.text : 'Paused by technician'),
+            icon: const Icon(Icons.pause, size: 16),
+            label: const Text('Pause'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<WorkOrderProvider>();
@@ -156,6 +197,19 @@ class _JobExecutionScreenState extends State<JobExecutionScreen> {
                 ],
               ),
             ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.pause_circle_outline),
+            tooltip: 'Pause Job',
+            onPressed: job?.status.toLowerCase() == 'inprogress'
+                ? () async {
+                    final reason = await _showPauseDialog();
+                    if (reason != null) {
+                      await provider.pauseJob(widget.workOrderId,
+                          reason: reason);
+                    }
+                  }
+                : null,
           ),
           IconButton(
             icon: const Icon(Icons.refresh),

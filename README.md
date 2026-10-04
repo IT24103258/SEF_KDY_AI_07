@@ -87,13 +87,6 @@ dotnet run
 ```
 API Swagger Documentation available at: `http://localhost:5000/swagger`
 
-**File storage (work order evidence photos & signatures):**
-- Uploaded evidence photos are stored on local disk under the path configured by `FileStorage:UploadDirectory` in `appsettings.json` (default `./uploads`); only the generated file key and metadata are stored in PostgreSQL.
-- The maximum upload size is controlled by `FileStorage:MaxSizeBytes` (default 10 MB). Only `.jpg`, `.jpeg`, `.png`, and `.webp` files are accepted.
-- The storage directory is local to the machine running the API — for production deployments, mount persistent storage and include it in backups, or files will be lost on redeploy/restart.
-- Evidence photos and signatures are only served through the authenticated endpoint `GET /api/work-orders/{id}/evidence/{evidenceId}/photo` to users authorized to view that work order. There are no public/static URLs for evidence files.
-- The drawn customer signature is captured as a small SVG **electronic image** (stored as a compact data URL in PostgreSQL by design). It records who signed on the device — it is not a cryptographically verified digital signature.
-
 ### 3. Frontend Web Application (React + Vite)
 ```bash
 cd frontend/fixflow-web

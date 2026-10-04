@@ -316,11 +316,32 @@ export const WorkOrderDetailPage = () => {
               <span style={{ color: 'var(--text-secondary)', display: 'block', fontSize: '0.76rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '2px' }}>
                 Schedule
               </span>
-              <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
-                {workOrder.scheduledStartTime ? (
-                  `${new Date(workOrder.scheduledStartTime).toLocaleDateString()}, ${new Date(workOrder.scheduledStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${workOrder.scheduledEndTime ? new Date(workOrder.scheduledEndTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''}`
-                ) : 'Unscheduled Draft'}
-              </span>
+              {workOrder.scheduledStartTime ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  {isPending && workOrder.requestedStartTime && (
+                    <div>
+                      <span style={{ fontSize: '0.74rem', color: 'var(--text-secondary)' }}>Requested: </span>
+                      <span style={{ fontWeight: 500, color: 'var(--text-secondary)', textDecoration: workOrder.requestedStartTime !== workOrder.scheduledStartTime ? 'line-through' : 'none' }}>
+                        {new Date(workOrder.requestedStartTime).toLocaleDateString()},{' '}
+                        {new Date(workOrder.requestedStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        {workOrder.requestedEndTime ? ` – ${new Date(workOrder.requestedEndTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+                      </span>
+                    </div>
+                  )}
+                  <div>
+                    {isPending && workOrder.requestedStartTime && workOrder.requestedStartTime !== workOrder.scheduledStartTime && (
+                      <span style={{ fontSize: '0.74rem', color: '#3b82f6', fontWeight: 600 }}>AI Proposed: </span>
+                    )}
+                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>
+                      {new Date(workOrder.scheduledStartTime).toLocaleDateString()},{' '}
+                      {new Date(workOrder.scheduledStartTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      {workOrder.scheduledEndTime ? ` – ${new Date(workOrder.scheduledEndTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>Unscheduled Draft</span>
+              )}
             </div>
 
             <div>

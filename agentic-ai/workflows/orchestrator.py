@@ -72,7 +72,10 @@ def execute_workflow(request: WorkflowExecutionRequest):
     scheduling_agent = SchedulingAgent()
     step4_result = scheduling_agent.run_step({
         "request_id": request.request_id,
-        "assigned_technician_id": step3_result.output_data.get("top_match_id")
+        "assigned_technician_id": step3_result.output_data.get("top_match_id"),
+        "priority": step2_result.output_data.get("priority_level", "Normal"),
+        "description": request.input_context.get("description", ""),
+        "category": step1_result.output_data.get("category", "General"),
     })
     steps.append(step4_result)
 
@@ -87,3 +90,8 @@ def execute_workflow(request: WorkflowExecutionRequest):
         requires_human_approval=requires_approval,
         approval_reason=approval_reason
     )
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("workflows.orchestrator:app", host="0.0.0.0", port=8001, reload=True)
