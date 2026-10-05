@@ -15,11 +15,28 @@ public static class DatabaseSeeder
         {
             var roles = new List<Role>
             {
-                new Role { Name = "Administrator", Description = "System administrator with full access" },
-                new Role { Name = "Manager", Description = "Operations manager with dispatch & approval rights" },
-                new Role { Name = "Technician", Description = "Field technician executing work orders" },
-                new Role { Name = "Requester", Description = "Apartment resident or staff submitting requests" }
+                new Role
+                {
+                    Name = "Administrator",
+                    Description = "System administrator with full access"
+                },
+                new Role
+                {
+                    Name = "Manager",
+                    Description = "Operations manager with dispatch & approval rights"
+                },
+                new Role
+                {
+                    Name = "Technician",
+                    Description = "Field technician executing work orders"
+                },
+                new Role
+                {
+                    Name = "Requester",
+                    Description = "Apartment resident or staff submitting requests"
+                }
             };
+
             await context.Roles.AddRangeAsync(roles);
             await context.SaveChangesAsync();
         }
@@ -77,7 +94,13 @@ public static class DatabaseSeeder
                 RoleId = requesterRole.Id
             };
 
-            await context.Users.AddRangeAsync(adminUser, managerUser, techUser, requesterUser);
+            await context.Users.AddRangeAsync(
+                adminUser,
+                managerUser,
+                techUser,
+                requesterUser
+            );
+
             await context.SaveChangesAsync();
 
             // Seed Technician Profile
@@ -90,40 +113,545 @@ public static class DatabaseSeeder
                 CurrentLatitude = 6.9147,
                 CurrentLongitude = 79.9733
             };
+
             await context.Technicians.AddAsync(technician);
             await context.SaveChangesAsync();
         }
 
-        // 3. Apartment Complex Locations Seeding (Single Complex Hierarchy)
+        // 3. Apartment Complex Locations Seeding
+        //
+        // Structure:
+        // Tower A
+        //   Floor 1: Units 101-105
+        //   Floor 2: Units 201-205
+        //   Floor 3: Units 301-305
+        //
+        // Tower B
+        //   Floor 1: Units 101-105
+        //   Floor 2: Units 201-205
+        //   Floor 3: Units 301-305
+        //
+        // Shared locations are intentionally limited to:
+        //   - Tower A Main Lobby
+        //   - Tower B Main Lobby
+        //   - Common Area Pool
+        //   - Common Area Basement Parking
+        //
+        // Apartments themselves are locations. Kitchen/Bathroom are not
+        // separate seeded locations.
         if (!await context.Locations.AnyAsync())
         {
             var locations = new List<Location>
             {
-                new Location { Name = "Tower A - Unit 305", Building = "Tower A", Floor = "Floor 3", Room = "Unit 305 - Bathroom", Latitude = 6.9147, Longitude = 79.9733 },
-                new Location { Name = "Tower A - Unit 204", Building = "Tower A", Floor = "Floor 2", Room = "Unit 204 - Kitchen", Latitude = 6.9147, Longitude = 79.9733 },
-                new Location { Name = "Tower B - Lobby", Building = "Tower B", Floor = "Floor 1", Room = "Common Area - Lobby", Latitude = 6.9150, Longitude = 79.9740 },
-                new Location { Name = "Tower B - Floor 2 Corridor", Building = "Tower B", Floor = "Floor 2", Room = "Common Area - Corridor", Latitude = 6.9150, Longitude = 79.9740 },
-                new Location { Name = "Common Area - Pool", Building = "Common Areas", Floor = "Ground Floor", Room = "Pool & Pump House", Latitude = 6.9142, Longitude = 79.9728 },
-                new Location { Name = "Common Area - Parking", Building = "Common Areas", Floor = "Basement", Room = "Parking Area B1", Latitude = 6.9142, Longitude = 79.9728 }
+                // =========================================================
+                // TOWER A - FLOOR 1
+                // =========================================================
+                new Location
+                {
+                    Name = "Tower A - Unit 101",
+                    Building = "Tower A",
+                    Floor = "Floor 1",
+                    Room = "Unit 101",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+                new Location
+                {
+                    Name = "Tower A - Unit 102",
+                    Building = "Tower A",
+                    Floor = "Floor 1",
+                    Room = "Unit 102",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+                new Location
+                {
+                    Name = "Tower A - Unit 103",
+                    Building = "Tower A",
+                    Floor = "Floor 1",
+                    Room = "Unit 103",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+                new Location
+                {
+                    Name = "Tower A - Unit 104",
+                    Building = "Tower A",
+                    Floor = "Floor 1",
+                    Room = "Unit 104",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+                new Location
+                {
+                    Name = "Tower A - Unit 105",
+                    Building = "Tower A",
+                    Floor = "Floor 1",
+                    Room = "Unit 105",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+
+                // =========================================================
+                // TOWER A - FLOOR 2
+                // =========================================================
+                new Location
+                {
+                    Name = "Tower A - Unit 201",
+                    Building = "Tower A",
+                    Floor = "Floor 2",
+                    Room = "Unit 201",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+                new Location
+                {
+                    Name = "Tower A - Unit 202",
+                    Building = "Tower A",
+                    Floor = "Floor 2",
+                    Room = "Unit 202",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+                new Location
+                {
+                    Name = "Tower A - Unit 203",
+                    Building = "Tower A",
+                    Floor = "Floor 2",
+                    Room = "Unit 203",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+                new Location
+                {
+                    Name = "Tower A - Unit 204",
+                    Building = "Tower A",
+                    Floor = "Floor 2",
+                    Room = "Unit 204",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+                new Location
+                {
+                    Name = "Tower A - Unit 205",
+                    Building = "Tower A",
+                    Floor = "Floor 2",
+                    Room = "Unit 205",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+
+                // =========================================================
+                // TOWER A - FLOOR 3
+                // =========================================================
+                new Location
+                {
+                    Name = "Tower A - Unit 301",
+                    Building = "Tower A",
+                    Floor = "Floor 3",
+                    Room = "Unit 301",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+                new Location
+                {
+                    Name = "Tower A - Unit 302",
+                    Building = "Tower A",
+                    Floor = "Floor 3",
+                    Room = "Unit 302",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+                new Location
+                {
+                    Name = "Tower A - Unit 303",
+                    Building = "Tower A",
+                    Floor = "Floor 3",
+                    Room = "Unit 303",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+                new Location
+                {
+                    Name = "Tower A - Unit 304",
+                    Building = "Tower A",
+                    Floor = "Floor 3",
+                    Room = "Unit 304",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+                new Location
+                {
+                    Name = "Tower A - Unit 305",
+                    Building = "Tower A",
+                    Floor = "Floor 3",
+                    Room = "Unit 305",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+
+                // =========================================================
+                // TOWER A - SHARED
+                // =========================================================
+                new Location
+                {
+                    Name = "Tower A - Main Lobby",
+                    Building = "Tower A",
+                    Floor = "Ground Floor",
+                    Room = "Main Lobby",
+                    Latitude = 6.9147,
+                    Longitude = 79.9733
+                },
+
+                // =========================================================
+                // TOWER B - FLOOR 1
+                // =========================================================
+                new Location
+                {
+                    Name = "Tower B - Unit 101",
+                    Building = "Tower B",
+                    Floor = "Floor 1",
+                    Room = "Unit 101",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+                new Location
+                {
+                    Name = "Tower B - Unit 102",
+                    Building = "Tower B",
+                    Floor = "Floor 1",
+                    Room = "Unit 102",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+                new Location
+                {
+                    Name = "Tower B - Unit 103",
+                    Building = "Tower B",
+                    Floor = "Floor 1",
+                    Room = "Unit 103",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+                new Location
+                {
+                    Name = "Tower B - Unit 104",
+                    Building = "Tower B",
+                    Floor = "Floor 1",
+                    Room = "Unit 104",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+                new Location
+                {
+                    Name = "Tower B - Unit 105",
+                    Building = "Tower B",
+                    Floor = "Floor 1",
+                    Room = "Unit 105",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+
+                // =========================================================
+                // TOWER B - FLOOR 2
+                // =========================================================
+                new Location
+                {
+                    Name = "Tower B - Unit 201",
+                    Building = "Tower B",
+                    Floor = "Floor 2",
+                    Room = "Unit 201",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+                new Location
+                {
+                    Name = "Tower B - Unit 202",
+                    Building = "Tower B",
+                    Floor = "Floor 2",
+                    Room = "Unit 202",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+                new Location
+                {
+                    Name = "Tower B - Unit 203",
+                    Building = "Tower B",
+                    Floor = "Floor 2",
+                    Room = "Unit 203",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+                new Location
+                {
+                    Name = "Tower B - Unit 204",
+                    Building = "Tower B",
+                    Floor = "Floor 2",
+                    Room = "Unit 204",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+                new Location
+                {
+                    Name = "Tower B - Unit 205",
+                    Building = "Tower B",
+                    Floor = "Floor 2",
+                    Room = "Unit 205",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+
+                // =========================================================
+                // TOWER B - FLOOR 3
+                // =========================================================
+                new Location
+                {
+                    Name = "Tower B - Unit 301",
+                    Building = "Tower B",
+                    Floor = "Floor 3",
+                    Room = "Unit 301",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+                new Location
+                {
+                    Name = "Tower B - Unit 302",
+                    Building = "Tower B",
+                    Floor = "Floor 3",
+                    Room = "Unit 302",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+                new Location
+                {
+                    Name = "Tower B - Unit 303",
+                    Building = "Tower B",
+                    Floor = "Floor 3",
+                    Room = "Unit 303",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+                new Location
+                {
+                    Name = "Tower B - Unit 304",
+                    Building = "Tower B",
+                    Floor = "Floor 3",
+                    Room = "Unit 304",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+                new Location
+                {
+                    Name = "Tower B - Unit 305",
+                    Building = "Tower B",
+                    Floor = "Floor 3",
+                    Room = "Unit 305",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+
+                // =========================================================
+                // TOWER B - SHARED
+                // =========================================================
+                new Location
+                {
+                    Name = "Tower B - Main Lobby",
+                    Building = "Tower B",
+                    Floor = "Ground Floor",
+                    Room = "Main Lobby",
+                    Latitude = 6.9150,
+                    Longitude = 79.9740
+                },
+
+                // =========================================================
+                // COMMON AREAS
+                // =========================================================
+                new Location
+                {
+                    Name = "Common Area - Pool",
+                    Building = "Common Areas",
+                    Floor = "Ground Floor",
+                    Room = "Pool",
+                    Latitude = 6.9142,
+                    Longitude = 79.9728
+                },
+                new Location
+                {
+                    Name = "Common Area - Basement Parking",
+                    Building = "Common Areas",
+                    Floor = "Basement",
+                    Room = "Basement Parking",
+                    Latitude = 6.9142,
+                    Longitude = 79.9728
+                }
             };
+
             await context.Locations.AddRangeAsync(locations);
             await context.SaveChangesAsync();
         }
 
         // 4. Apartment Complex Assets Seeding
+        //
+        // Asset names are intentionally generic.
+        // Their LocationId determines where the asset is installed.
+        //
+        // No location-specific asset names such as:
+        // "Tower A Passenger Elevator"
+        // "Tower B Lobby Air Conditioner"
+        //
+        // Instead:
+        // "Passenger Elevator"
+        // "Air Conditioner"
         if (!await context.Assets.AnyAsync())
         {
-            var locTowerA = await context.Locations.FirstAsync(l => l.Building == "Tower A");
-            var locTowerB = await context.Locations.FirstAsync(l => l.Building == "Tower B");
-            var locCommon = await context.Locations.FirstAsync(l => l.Building == "Common Areas");
+            // Apartment assets
+            var towerAUnit102 = await context.Locations
+                .FirstAsync(l => l.Name == "Tower A - Unit 102");
+
+            var towerBUnit204 = await context.Locations
+                .FirstAsync(l => l.Name == "Tower B - Unit 204");
+
+            // Lobby assets
+            var towerALobby = await context.Locations
+                .FirstAsync(l => l.Name == "Tower A - Main Lobby");
+
+            var towerBLobby = await context.Locations
+                .FirstAsync(l => l.Name == "Tower B - Main Lobby");
+
+            // Common-area assets
+            var poolLocation = await context.Locations
+                .FirstAsync(l => l.Name == "Common Area - Pool");
+
+            var basementParking = await context.Locations
+                .FirstAsync(l => l.Name == "Common Area - Basement Parking");
 
             var assets = new List<Asset>
             {
-                new Asset { Name = "Tower A Passenger Elevator", AssetCode = "ELEV-TWRA-01", Category = "Elevator/Lift", Criticality = "Critical", LocationId = locTowerA.Id },
-                new Asset { Name = "Tower B Lobby Air Conditioner", AssetCode = "HVAC-TWRB-01", Category = "HVAC", Criticality = "Medium", LocationId = locTowerB.Id },
-                new Asset { Name = "Main Water Booster Pump System", AssetCode = "PUMP-CMN-01", Category = "Water Supply", Criticality = "High", LocationId = locCommon.Id },
-                new Asset { Name = "Backup Diesel Generator", AssetCode = "PWR-GEN-01", Category = "Electrical", Criticality = "Critical", LocationId = locCommon.Id }
+                // ---------------------------------------------------------
+                // APARTMENT ASSETS
+                // ---------------------------------------------------------
+                new Asset
+                {
+                    Name = "Refrigerator",
+                    AssetCode = "APP-REF-001",
+                    Category = "Appliance",
+                    Criticality = "Medium",
+                    LocationId = towerAUnit102.Id
+                },
+                new Asset
+                {
+                    Name = "Circuit Breaker",
+                    AssetCode = "ELEC-CB-001",
+                    Category = "Electrical",
+                    Criticality = "High",
+                    LocationId = towerAUnit102.Id
+                },
+                new Asset
+                {
+                    Name = "Washing Machine",
+                    AssetCode = "APP-WM-001",
+                    Category = "Appliance",
+                    Criticality = "Medium",
+                    LocationId = towerBUnit204.Id
+                },
+                new Asset
+                {
+                    Name = "Water Heater",
+                    AssetCode = "PLB-WH-001",
+                    Category = "Water Supply",
+                    Criticality = "High",
+                    LocationId = towerBUnit204.Id
+                },
+
+                // ---------------------------------------------------------
+                // TOWER A MAIN LOBBY
+                // ---------------------------------------------------------
+                new Asset
+                {
+                    Name = "Passenger Elevator",
+                    AssetCode = "ELEV-001",
+                    Category = "Elevator/Lift",
+                    Criticality = "Critical",
+                    LocationId = towerALobby.Id
+                },
+                new Asset
+                {
+                    Name = "Smoke Detector",
+                    AssetCode = "FIRE-SD-001",
+                    Category = "Fire Safety",
+                    Criticality = "High",
+                    LocationId = towerALobby.Id
+                },
+
+                // ---------------------------------------------------------
+                // TOWER B MAIN LOBBY
+                // ---------------------------------------------------------
+                new Asset
+                {
+                    Name = "Air Conditioner",
+                    AssetCode = "HVAC-001",
+                    Category = "HVAC",
+                    Criticality = "Medium",
+                    LocationId = towerBLobby.Id
+                },
+                new Asset
+                {
+                    Name = "CCTV Camera",
+                    AssetCode = "SEC-CCTV-001",
+                    Category = "Security",
+                    Criticality = "High",
+                    LocationId = towerBLobby.Id
+                },
+
+                // ---------------------------------------------------------
+                // COMMON AREA - POOL
+                // ---------------------------------------------------------
+                new Asset
+                {
+                    Name = "Water Booster Pump",
+                    AssetCode = "PUMP-001",
+                    Category = "Water Supply",
+                    Criticality = "High",
+                    LocationId = poolLocation.Id
+                },
+
+                // ---------------------------------------------------------
+                // COMMON AREA - BASEMENT PARKING
+                // ---------------------------------------------------------
+                new Asset
+                {
+                    Name = "Main Electrical Panel",
+                    AssetCode = "ELEC-MP-001",
+                    Category = "Electrical",
+                    Criticality = "Critical",
+                    LocationId = basementParking.Id
+                },
+                new Asset
+                {
+                    Name = "Emergency Generator",
+                    AssetCode = "PWR-GEN-001",
+                    Category = "Electrical",
+                    Criticality = "Critical",
+                    LocationId = basementParking.Id
+                },
+                new Asset
+                {
+                    Name = "Fire Alarm Panel",
+                    AssetCode = "FIRE-FAP-001",
+                    Category = "Fire Safety",
+                    Criticality = "Critical",
+                    LocationId = basementParking.Id
+                },
+                new Asset
+                {
+                    Name = "Gate Motor",
+                    AssetCode = "GATE-001",
+                    Category = "Common Area",
+                    Criticality = "High",
+                    LocationId = basementParking.Id
+                }
             };
+
             await context.Assets.AddRangeAsync(assets);
             await context.SaveChangesAsync();
         }
@@ -133,14 +661,50 @@ public static class DatabaseSeeder
         {
             var categories = new List<IssueCategory>
             {
-                new IssueCategory { Name = "Electrical", Description = "Power outages, short circuits, lighting failures, panel issues", DefaultPriority = "High" },
-                new IssueCategory { Name = "HVAC", Description = "Air conditioning cooling failures, ventilation issues, thermostat faults", DefaultPriority = "Medium" },
-                new IssueCategory { Name = "Plumbing", Description = "Pipe leaks, drainage blockages, tap faults, water pressure issues", DefaultPriority = "Medium" },
-                new IssueCategory { Name = "Elevator/Lift", Description = "Elevator stoppage, abnormal noises, door sensor faults", DefaultPriority = "Critical" },
-                new IssueCategory { Name = "Water Supply", Description = "Water pump malfunction, tank overflow, pressure drops", DefaultPriority = "High" },
-                new IssueCategory { Name = "Common Area", Description = "Corridor lights, gym equipment, pool maintenance, parking gate", DefaultPriority = "Low" },
-                new IssueCategory { Name = "Structural", Description = "Broken doors, windows, locks, ceiling cracks, wall damage", DefaultPriority = "Low" }
+                new IssueCategory
+                {
+                    Name = "Electrical",
+                    Description = "Power outages, short circuits, lighting failures, panel issues",
+                    DefaultPriority = "High"
+                },
+                new IssueCategory
+                {
+                    Name = "HVAC",
+                    Description = "Air conditioning cooling failures, ventilation issues, thermostat faults",
+                    DefaultPriority = "Medium"
+                },
+                new IssueCategory
+                {
+                    Name = "Plumbing",
+                    Description = "Pipe leaks, drainage blockages, tap faults, water pressure issues",
+                    DefaultPriority = "Medium"
+                },
+                new IssueCategory
+                {
+                    Name = "Elevator/Lift",
+                    Description = "Elevator stoppage, abnormal noises, door sensor faults",
+                    DefaultPriority = "Critical"
+                },
+                new IssueCategory
+                {
+                    Name = "Water Supply",
+                    Description = "Water pump malfunction, tank overflow, pressure drops",
+                    DefaultPriority = "High"
+                },
+                new IssueCategory
+                {
+                    Name = "Common Area",
+                    Description = "Corridor lights, gym equipment, pool maintenance, parking gate",
+                    DefaultPriority = "Low"
+                },
+                new IssueCategory
+                {
+                    Name = "Structural",
+                    Description = "Broken doors, windows, locks, ceiling cracks, wall damage",
+                    DefaultPriority = "Low"
+                }
             };
+
             await context.IssueCategories.AddRangeAsync(categories);
             await context.SaveChangesAsync();
         }
@@ -150,11 +714,28 @@ public static class DatabaseSeeder
         {
             var skills = new List<Skill>
             {
-                new Skill { Name = "Residential Electrical Systems", Category = "Electrical" },
-                new Skill { Name = "HVAC & AC Maintenance", Category = "HVAC" },
-                new Skill { Name = "Residential Plumbing & Drainage Repair", Category = "Plumbing" },
-                new Skill { Name = "Elevator & Lift Maintenance", Category = "Elevator/Lift" }
+                new Skill
+                {
+                    Name = "Residential Electrical Systems",
+                    Category = "Electrical"
+                },
+                new Skill
+                {
+                    Name = "HVAC & AC Maintenance",
+                    Category = "HVAC"
+                },
+                new Skill
+                {
+                    Name = "Residential Plumbing & Drainage Repair",
+                    Category = "Plumbing"
+                },
+                new Skill
+                {
+                    Name = "Elevator & Lift Maintenance",
+                    Category = "Elevator/Lift"
+                }
             };
+
             await context.Skills.AddRangeAsync(skills);
             await context.SaveChangesAsync();
         }
@@ -164,34 +745,72 @@ public static class DatabaseSeeder
         {
             var slas = new List<SLAConfiguration>
             {
-                new SLAConfiguration { PriorityLevel = "Critical", ResponseTimeHours = 1, ResolutionTimeHours = 4, EscalationEmail = "escalations@fixflow.local" },
-                new SLAConfiguration { PriorityLevel = "High", ResponseTimeHours = 2, ResolutionTimeHours = 8, EscalationEmail = "manager@fixflow.local" },
-                new SLAConfiguration { PriorityLevel = "Medium", ResponseTimeHours = 4, ResolutionTimeHours = 24, EscalationEmail = "helpdesk@fixflow.local" },
-                new SLAConfiguration { PriorityLevel = "Low", ResponseTimeHours = 8, ResolutionTimeHours = 48, EscalationEmail = "helpdesk@fixflow.local" }
+                new SLAConfiguration
+                {
+                    PriorityLevel = "Critical",
+                    ResponseTimeHours = 1,
+                    ResolutionTimeHours = 4,
+                    EscalationEmail = "escalations@fixflow.local"
+                },
+                new SLAConfiguration
+                {
+                    PriorityLevel = "High",
+                    ResponseTimeHours = 2,
+                    ResolutionTimeHours = 8,
+                    EscalationEmail = "manager@fixflow.local"
+                },
+                new SLAConfiguration
+                {
+                    PriorityLevel = "Medium",
+                    ResponseTimeHours = 4,
+                    ResolutionTimeHours = 24,
+                    EscalationEmail = "helpdesk@fixflow.local"
+                },
+                new SLAConfiguration
+                {
+                    PriorityLevel = "Low",
+                    ResponseTimeHours = 8,
+                    ResolutionTimeHours = 48,
+                    EscalationEmail = "helpdesk@fixflow.local"
+                }
             };
+
             await context.SLAConfigurations.AddRangeAsync(slas);
             await context.SaveChangesAsync();
         }
 
         // 8. Sample Maintenance Request for Initial Workflow Demonstration
+        //
+        // This request is deliberately consistent:
+        // Location -> Tower B Main Lobby
+        // Asset    -> Air Conditioner
+        // Category -> HVAC
         if (!await context.MaintenanceRequests.AnyAsync())
         {
-            var loc = await context.Locations.FirstAsync(l => l.Building == "Tower A");
-            var asset = await context.Assets.FirstAsync(a => a.Category == "HVAC");
-            var reqUser = await context.Users.FirstAsync(u => u.Email == "requester@fixflow.local");
-            var cat = await context.IssueCategories.FirstAsync(c => c.Name == "HVAC");
+            var loc = await context.Locations
+                .FirstAsync(l => l.Name == "Tower B - Main Lobby");
+
+            var asset = await context.Assets
+                .FirstAsync(a => a.AssetCode == "HVAC-001");
+
+            var reqUser = await context.Users
+                .FirstAsync(u => u.Email == "requester@fixflow.local");
+
+            var cat = await context.IssueCategories
+                .FirstAsync(c => c.Name == "HVAC");
 
             var sampleRequest = new MaintenanceRequest
             {
                 RequestNumber = "REQ-2026-0001",
-                Title = "The AC in the Tower A lobby isn't cooling",
-                Description = "The main AC unit in the Tower A lobby is not cooling properly and is making an unusual rattling noise.",
+                Title = "The air conditioner in the Tower B lobby isn't cooling",
+                Description = "The air conditioner in the Tower B main lobby is not cooling properly and is making an unusual rattling noise.",
                 Status = RequestStatus.Submitted,
                 LocationId = loc.Id,
                 AssetId = asset.Id,
                 RequesterId = reqUser.Id,
                 CategoryId = cat.Id
             };
+
             await context.MaintenanceRequests.AddAsync(sampleRequest);
             await context.SaveChangesAsync();
         }
