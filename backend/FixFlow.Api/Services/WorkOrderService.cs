@@ -274,7 +274,7 @@ public class WorkOrderService : IWorkOrderService
             var isOutsideBusinessHours = !originalValidation.IsWithinBusinessHours;
             var isTechnicianUnavailable = !originalValidation.IsWithinTechnicianAvailability;
             var isSlaBreached = !originalValidation.IsSlaCompliant;
-            var isCritical = priority == WorkOrderPriority.Critical;
+            var isHighImpactPriority = priority == WorkOrderPriority.High || priority == WorkOrderPriority.Critical;
 
             if (isConflict)
             {
@@ -443,17 +443,17 @@ public class WorkOrderService : IWorkOrderService
                 workOrder.AiDecisionSummary = $"Proposed schedule breaches SLA deadline for technician {tech.User?.FirstName} {tech.User?.LastName}. Manager approval required.";
                 approvalReason = "Proposed schedule breaches SLA deadline. Manager approval required.";
             }
-            else if (isCritical)
+            else if (isHighImpactPriority)
             {
-                // Scenario 4: Critical priority → PendingManagerApproval
+                // Scenario 4: High/Critical priority → PendingManagerApproval
                 workOrder.Status = WorkOrderStatus.PendingManagerApproval;
                 workOrder.ConflictDetected = false;
-                workOrder.AiDecisionSummary = $"Critical priority work order for technician {tech.User?.FirstName} {tech.User?.LastName}. Manager sign-off required before scheduling.";
-                approvalReason = "Critical priority work order requires Manager sign-off.";
+                workOrder.AiDecisionSummary = $"{priority} priority work order for technician {tech.User?.FirstName} {tech.User?.LastName}. Manager sign-off required before scheduling.";
+                approvalReason = $"{priority} priority work order requires Manager sign-off.";
             }
             else
             {
-                // Scenarios 1 & 5: No conflict + valid hours + non-critical → Scheduled immediately
+                // Scenarios 1 & 5: No conflict + valid hours + non-high-impact → Scheduled immediately
                 workOrder.Status = WorkOrderStatus.Scheduled;
                 workOrder.ConflictDetected = false;
                 workOrder.AiDecisionSummary = $"Schedule validated successfully. No conflicts detected, within business hours. Auto-scheduled for technician {tech.User?.FirstName} {tech.User?.LastName}.";

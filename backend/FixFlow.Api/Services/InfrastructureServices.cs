@@ -358,7 +358,9 @@ public class LocalFileStorageService : IFileStorageService
 
     private static string SanitizeFileName(string fileName)
     {
-        var name = Path.GetFileName(fileName ?? string.Empty).Trim();
+        // Cross-platform: treat both '/' and '\' as path separators before extracting filename
+        var normalized = (fileName ?? string.Empty).Replace('\\', '/');
+        var name = Path.GetFileName(normalized).Trim();
 
         var invalid = Path.GetInvalidFileNameChars();
         var chars = name.ToCharArray();
