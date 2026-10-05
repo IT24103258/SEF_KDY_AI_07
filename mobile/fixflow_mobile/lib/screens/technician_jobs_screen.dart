@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
+import '../core/routes/app_router.dart';
 import '../providers/auth_provider.dart';
 
 class TechnicianJobsScreen extends StatefulWidget {
@@ -232,77 +233,100 @@ class _TechnicianJobsScreenState extends State<TechnicianJobsScreen> {
           )
         ],
       ),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : assignedJobs.isEmpty
-              ? const Center(child: Text('No assigned jobs available.'))
-              : Padding(
-                  padding: const EdgeInsets.all(12.0),
-                  child: ListView.builder(
-                    itemCount: assignedJobs.length,
-                    itemBuilder: (context, index) {
-                      final job = assignedJobs[index];
+      body: Column(
+        children: [
+          // Component 4 — Scheduling & Work Order Management Access
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Card(
+              color: const Color(0xFF2457C5).withOpacity(0.08),
+              child: ListTile(
+                leading: const Icon(Icons.calendar_view_week, color: Color(0xFF2457C5), size: 32),
+                title: const Text('Scheduling & Work Orders', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('View schedule and manage all work orders'),
+                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                onTap: () {
+                  Navigator.pushNamed(context, AppRouter.component4Shell);
+                },
+              ),
+            ),
+          ),
+          // Member 3 — Existing Job List
+          Expanded(
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : assignedJobs.isEmpty
+                    ? const Center(child: Text('No assigned jobs available.'))
+                    : Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: ListView.builder(
+                          itemCount: assignedJobs.length,
+                          itemBuilder: (context, index) {
+                            final job = assignedJobs[index];
 
-                      final id = job["id"] ?? job["requestId"] ?? (index + 1);
-                      final title = job["title"] ?? job["name"] ?? job["requiredSkill"] ?? "Maintenance Task";
-                      final location = job["location"] ?? job["address"] ?? "Building A";
-                      final priority = job["priority"] ?? job["priorityLevel"] ?? "High";
-                      final status = job["status"] ?? job["Status"] ?? "Assigned";
+                            final id = job["id"] ?? job["requestId"] ?? (index + 1);
+                            final title = job["title"] ?? job["name"] ?? job["requiredSkill"] ?? "Maintenance Task";
+                            final location = job["location"] ?? job["address"] ?? "Building A";
+                            final priority = job["priority"] ?? job["priorityLevel"] ?? "High";
+                            final status = job["status"] ?? job["Status"] ?? "Assigned";
 
-                      return Card(
-                        margin: const EdgeInsets.symmetric(vertical: 8),
-                        child: Padding(
-                          padding: const EdgeInsets.all(14.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text('Job #$id', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                  Chip(
-                                    label: Text(status),
-                                    backgroundColor: status == "Completed"
-                                        ? Colors.green.shade100
-                                        : status == "In Progress"
-                                            ? Colors.blue.shade100
-                                            : status == "Rejected"
-                                                ? Colors.red.shade100
-                                                : Colors.amber.shade100,
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-                              const SizedBox(height: 6),
-                              Text('Location: $location'),
-                              Text('Priority: $priority', style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
-                              const Divider(),
-                              
-                              if (status == "Assigned")
-                                Wrap(
-                                  alignment: WrapAlignment.end,
-                                  spacing: 8.0,
+                            return Card(
+                              margin: const EdgeInsets.symmetric(vertical: 8),
+                              child: Padding(
+                                padding: const EdgeInsets.all(14.0),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    ElevatedButton(
-                                      onPressed: () => _showSafetyChecklistDialog(context, index, job),
-                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
-                                      child: const Text('Accept / Start'),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Text('Job #$id', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                        Chip(
+                                          label: Text(status),
+                                          backgroundColor: status == "Completed"
+                                              ? Colors.green.shade100
+                                              : status == "In Progress"
+                                                  ? Colors.blue.shade100
+                                                  : status == "Rejected"
+                                                      ? Colors.red.shade100
+                                                      : Colors.amber.shade100,
+                                        ),
+                                      ],
                                     ),
-                                    ElevatedButton(
-                                      onPressed: () => _showRejectJobDialog(context, index, job),
-                                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
-                                      child: const Text('Reject Job'),
-                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                                    const SizedBox(height: 6),
+                                    Text('Location: $location'),
+                                    Text('Priority: $priority', style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                                    const Divider(),
+                                    
+                                    if (status == "Assigned")
+                                      Wrap(
+                                        alignment: WrapAlignment.end,
+                                        spacing: 8.0,
+                                        children: [
+                                          ElevatedButton(
+                                            onPressed: () => _showSafetyChecklistDialog(context, index, job),
+                                            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, foregroundColor: Colors.white),
+                                            child: const Text('Accept / Start'),
+                                          ),
+                                          ElevatedButton(
+                                            onPressed: () => _showRejectJobDialog(context, index, job),
+                                            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+                                            child: const Text('Reject Job'),
+                                          ),
+                                        ],
+                                      ),
                                   ],
                                 ),
-                            ],
-                          ),
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
-                  ),
-                ),
+                      ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -62,6 +62,36 @@ class HomeScreen extends StatelessWidget {
                 ),
               ),
 
+            // Component 4 — Scheduling & Work Order Management
+            if (role == 'Technician') ...[
+              const SizedBox(height: 12),
+              Card(
+                color: const Color(0xFF2457C5).withOpacity(0.08),
+                child: ListTile(
+                  leading: const Icon(Icons.calendar_today, color: Color(0xFF2457C5), size: 36),
+                  title: const Text('My Schedule', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('View scheduled work orders and calendar'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    Navigator.pushNamed(context, AppRouter.technicianSchedule);
+                  },
+                ),
+              ),
+              const SizedBox(height: 12),
+              Card(
+                color: const Color(0xFF2457C5).withOpacity(0.08),
+                child: ListTile(
+                  leading: const Icon(Icons.work_outline, color: Color(0xFF2457C5), size: 36),
+                  title: const Text('All Work Orders', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('View all assigned work orders with filters'),
+                  trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                  onTap: () {
+                    Navigator.pushNamed(context, AppRouter.allJobs);
+                  },
+                ),
+              ),
+            ],
+
             const SizedBox(height: 24),
             const Text(
               'Quick Actions',

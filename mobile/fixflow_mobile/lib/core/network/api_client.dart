@@ -91,6 +91,15 @@ class ApiClient {
     return _handleResponse(response);
   }
 
+  Future<Map<String, dynamic>> uploadMultipart(
+    String endpoint, {
+    required List<int> fileBytes,
+    required String filename,
+    String fieldName = 'file',
+  }) async {
+    return uploadFile(endpoint, fileBytes, filename);
+  }
+
   String _contentTypeFor(String fileName) {
     final ext = fileName.toLowerCase().split('.').last;
     if (ext == 'png') return 'image/png';
