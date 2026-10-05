@@ -20,6 +20,14 @@ import '../../screens/priority_details_screen.dart';
 import '../../screens/risk_matrix_screen.dart';
 import '../../screens/risk_simulator_screen.dart';
 
+// ── MEMBER 4 ─────────────────────────────────────────────────────────────────
+import '../../screens/technician_schedule_screen.dart';
+import '../../screens/all_jobs_screen.dart';
+import '../../screens/job_details_screen.dart';
+import '../../screens/job_execution_screen.dart';
+import '../../screens/digital_signature_screen.dart';
+import '../../screens/main_shell_screen.dart';
+
 /*
 ================================================================================
 FIXFLOW SHARED FOUNDATION FLUTTER ROUTER
@@ -81,10 +89,56 @@ class AppRouter {
   // ============================================================
   // MEMBER 4 ROUTE CONSTANTS — SCHEDULING & WORK ORDER MANAGEMENT
   // ============================================================
-  // Example: static const String workOrderChecklist = '/work-order-checklist';
+  static const String technicianSchedule = '/technician-schedule';
+  static const String allJobs = '/all-jobs';
+  static const String jobDetails = '/job-details';
+  static const String jobExecution = '/job-execution';
+  static const String jobSignature = '/job-signature';
+  static const String component4Shell = '/component4-shell';
+
+  static String jobDetailsPath(String workOrderId) =>
+      '/jobs/${Uri.encodeComponent(workOrderId)}';
+
+  static String jobExecutionPath(String workOrderId) =>
+      '${jobDetailsPath(workOrderId)}/execute';
+
+  static String jobSignaturePath(String workOrderId) =>
+      '${jobDetailsPath(workOrderId)}/signature';
 
 
   static Route<dynamic> generateRoute(RouteSettings settings) {
+    final routeName = settings.name;
+    final uri = Uri.tryParse(routeName ?? '');
+    final segments = uri?.pathSegments ?? const <String>[];
+
+    // Handle dynamic job routes: /jobs/:id, /jobs/:id/execute, /jobs/:id/signature
+    if (segments.length == 2 && segments.first == 'jobs') {
+      return MaterialPageRoute(
+        settings: settings,
+        builder: (_) => JobDetailsScreen(workOrderId: segments[1]),
+      );
+    }
+
+    if (segments.length == 3 && segments.first == 'jobs') {
+      final workOrderId = segments[1];
+      if (segments[2] == 'execute') {
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => JobExecutionScreen(workOrderId: workOrderId),
+        );
+      }
+      if (segments[2] == 'signature') {
+        final args = settings.arguments as Map<String, dynamic>? ?? const {};
+        return MaterialPageRoute(
+          settings: settings,
+          builder: (_) => DigitalSignatureScreen(
+            workOrderId: workOrderId,
+            elapsedSeconds: args['elapsedSeconds'] as int? ?? 0,
+          ),
+        );
+      }
+    }
+
     switch (settings.name) {
       // Shared Foundation Route Cases (auth screens are unguarded)
       case login:
@@ -179,8 +233,42 @@ class AppRouter {
       // ============================================================
       // MEMBER 4 ROUTE CASES — SCHEDULING & WORK ORDER MANAGEMENT
       // ============================================================
-      // case workOrderChecklist:
-      //   return MaterialPageRoute(builder: (_) => const WorkOrderChecklistScreen());
+      case technicianSchedule:
+        return MaterialPageRoute(
+            builder: (_) => const _RouteGuard(
+                allowedRoles: {'Technician'},
+                child: TechnicianScheduleScreen()));
+      case allJobs:
+        return MaterialPageRoute(
+            builder: (_) => const _RouteGuard(
+                allowedRoles: {'Technician'},
+                child: AllJobsScreen()));
+      case jobDetails:
+        final id = settings.arguments as String? ?? '';
+        return MaterialPageRoute(
+            builder: (_) => _RouteGuard(
+                allowedRoles: {'Technician'},
+                child: JobDetailsScreen(workOrderId: id)));
+      case jobExecution:
+        final id = settings.arguments as String? ?? '';
+        return MaterialPageRoute(
+            builder: (_) => _RouteGuard(
+                allowedRoles: {'Technician'},
+                child: JobExecutionScreen(workOrderId: id)));
+      case jobSignature:
+        final args = settings.arguments as Map<String, dynamic>? ?? const {};
+        return MaterialPageRoute(
+            builder: (_) => _RouteGuard(
+                allowedRoles: {'Technician'},
+                child: DigitalSignatureScreen(
+                  workOrderId: args['workOrderId'] as String? ?? '',
+                  elapsedSeconds: args['elapsedSeconds'] as int? ?? 0,
+                )));
+      case component4Shell:
+        return MaterialPageRoute(
+            builder: (_) => const _RouteGuard(
+                allowedRoles: {'Technician'},
+                child: MainShellScreen()));
 
 
       default:

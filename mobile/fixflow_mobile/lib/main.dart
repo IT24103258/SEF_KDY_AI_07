@@ -6,6 +6,8 @@ import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 // MEMBER 1
 import 'providers/request_provider.dart';
+// MEMBER 4
+import 'providers/work_order_provider.dart';
 
 void main() {
   runApp(const FixFlowApp());
@@ -22,6 +24,8 @@ class FixFlowApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => ThemeProvider()),
         // MEMBER 1 — Request Intake & Classification
         ChangeNotifierProvider(create: (_) => RequestProvider()),
+        // MEMBER 4 — Scheduling & Work Order Management
+        ChangeNotifierProvider(create: (_) => WorkOrderProvider()),
       ],
       child: Consumer2<AuthProvider, ThemeProvider>(
         builder: (context, authProvider, themeProvider, _) {
