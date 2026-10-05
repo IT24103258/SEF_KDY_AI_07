@@ -43,21 +43,40 @@ export const Card = ({ title, subtitle, children, action, className = '' }) => (
 export const StatusBadge = ({ status }) => {
   const getColors = () => {
     switch (status?.toLowerCase()) {
-      case 'completed': return { bg: 'rgba(74, 222, 128, 0.16)', color: 'var(--success-color)' };
+      case 'completed':
+        return { bg: 'rgba(74, 222, 128, 0.16)', color: 'var(--success-color)' };
+      case 'inprogress':
+        return { bg: 'rgba(59, 130, 246, 0.16)', color: '#3b82f6' };
+      case 'scheduled':
+      case 'approved':
+        return { bg: 'var(--primary-light)', color: 'var(--primary-color)' };
+      case 'pendingmanagerapproval':
+      case 'draft':
       case 'inreview':
-      case 'pending': return { bg: 'rgba(251, 191, 36, 0.16)', color: 'var(--warning-color)' };
-      case 'approved': return { bg: 'var(--primary-light)', color: 'var(--primary-color)' };
+      case 'pending':
+        return { bg: 'rgba(251, 191, 36, 0.16)', color: 'var(--warning-color)' };
+      case 'paused':
+      case 'revisionrequested':
+        return { bg: 'rgba(168, 85, 247, 0.16)', color: '#a855f7' };
       case 'rejected':
-      case 'cancelled': return { bg: 'rgba(255, 107, 113, 0.16)', color: 'var(--danger-color)' };
-      default: return { bg: 'var(--glass-bg)', color: 'var(--text-secondary)' };
+      case 'cancelled':
+      case 'failed':
+        return { bg: 'rgba(255, 107, 113, 0.16)', color: 'var(--danger-color)' };
+      default:
+        return { bg: 'var(--glass-bg)', color: 'var(--text-secondary)' };
     }
   };
 
   const style = getColors();
 
+  const formatLabel = (s) => {
+    if (!s) return '';
+    return s.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase()).trim();
+  };
+
   return (
     <span className="ff-badge" style={{ backgroundColor: style.bg, color: style.color }}>
-      {status}
+      {formatLabel(status)}
     </span>
   );
 };

@@ -44,10 +44,12 @@ Install the following software before running the project:
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - [Node.js (v18+)](https://nodejs.org/)
-- [Flutter SDK (v3.19+)](https://flutter.dev/)
+- [Flutter SDK (v3.47.4 — Dart SDK v3.13.3)](https://flutter.dev/)
 - [Python (v3.10+)](https://www.python.org/)
 - [PostgreSQL](https://www.postgresql.org/)
 - [pgAdmin 4](https://www.pgadmin.org/)
+
+> Verified with `flutter --version`: Flutter 3.47.4 (stable channel), Dart 3.13.3, DevTools 2.60.0. The Flutter SDK version and the bundled Dart SDK version are separate — do not put a Flutter version into the `sdk:` constraint in `pubspec.yaml` (that field is the Dart SDK constraint).
 
 > **Note:** Docker is not required for this project. PostgreSQL is installed and managed locally using PostgreSQL and pgAdmin 4.
 

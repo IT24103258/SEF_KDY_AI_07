@@ -195,5 +195,8 @@ public static class DatabaseSeeder
             await context.MaintenanceRequests.AddAsync(sampleRequest);
             await context.SaveChangesAsync();
         }
+
+        // 9. Component 4 — Scheduling & Work Orders Seeding
+        await WorkOrderSeeder.SeedWorkOrdersAsync(context);
     }
 }

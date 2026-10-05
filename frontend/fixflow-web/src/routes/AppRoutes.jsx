@@ -29,6 +29,11 @@ import {
   RequestDetailPage
 } from '../pages/Pages';
 
+import { WorkOrdersPage } from '../pages/WorkOrdersPage';
+import { WorkOrderDetailPage } from '../pages/WorkOrderDetailPage';
+import { ApprovalCenterPage } from '../pages/ApprovalCenterPage';
+import { CalendarPage } from '../pages/CalendarPage';
+import { WorkOrderReportsPage } from '../pages/WorkOrderReportsPage';
 import TechnicianAssignment from '../pages/TechnicianAssignment';
 
 import { getHomePath } from '../utils/roleRoutes';
@@ -330,17 +335,37 @@ export const AppRoutes = () => {
           ============================================================ */}
 
       <Route
-        path="/my-requests"
+        path="/work-orders"
         element={
           <ProtectedRoute
-            roles={['Requester']}
+            roles={ADMIN_ROLES}
           >
-            <CustomerRequests />
+            <WorkOrdersPage />
           </ProtectedRoute>
         }
       />
 
-      {/* Example:
+      <Route
+        path="/work-orders/:id"
+        element={
+          <ProtectedRoute
+            roles={['Administrator', 'Manager', 'Technician', 'Requester']}
+          >
+            <WorkOrderDetailPage />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/approval-center"
+        element={
+          <ProtectedRoute
+            roles={ADMIN_ROLES}
+          >
+            <ApprovalCenterPage />
+          </ProtectedRoute>
+        }
+      />
 
       <Route
         path="/calendar"
@@ -348,12 +373,21 @@ export const AppRoutes = () => {
           <ProtectedRoute
             roles={ADMIN_ROLES}
           >
-            <SchedulingCalendarPage />
+            <CalendarPage />
           </ProtectedRoute>
         }
       />
 
-      */}
+      <Route
+        path="/reports/scheduling"
+        element={
+          <ProtectedRoute
+            roles={ADMIN_ROLES}
+          >
+            <WorkOrderReportsPage />
+          </ProtectedRoute>
+        }
+      />
 
 
       {/* ============================================================

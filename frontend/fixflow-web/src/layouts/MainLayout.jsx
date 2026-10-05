@@ -9,8 +9,11 @@ import {
   CheckSquare,
   BarChart3,
   Wrench,
-  UserCheck, // Import added for Technician Matching icon
+  UserCheck,
   ClipboardList,
+  CalendarDays,
+  CheckCircle,
+  TrendingUp,
   Sun,
   Moon,
   LogOut,
@@ -87,6 +90,30 @@ const navItems = [
     roles: ADMIN_ROLES
   },
   {
+    label: 'Work Orders',
+    path: '/work-orders',
+    icon: Wrench,
+    roles: ADMIN_ROLES
+  },
+  {
+    label: 'Approval Center',
+    path: '/approval-center',
+    icon: CheckCircle,
+    roles: ADMIN_ROLES
+  },
+  {
+    label: 'Schedule Board',
+    path: '/calendar',
+    icon: CalendarDays,
+    roles: ADMIN_ROLES
+  },
+  {
+    label: 'Scheduling Reports',
+    path: '/reports/scheduling',
+    icon: TrendingUp,
+    roles: ADMIN_ROLES
+  },
+  {
     label: 'My Work Orders',
     path: '/technician',
     icon: Wrench,
@@ -118,13 +145,13 @@ export const MainLayout = ({ children }) => {
     `${user?.firstName?.[0] || ''}${user?.lastName?.[0] || ''}`
       .toUpperCase() || 'U';
 
-  // Show only navigation items allowed for the logged-in user's role
   const visibleNavItems = navItems.filter(item =>
     item.roles.includes(user?.role)
   );
 
   const NavLink = ({ item }) => {
-    const active = location.pathname === item.path;
+    const active = location.pathname === item.path ||
+      (item.path !== '/' && location.pathname.startsWith(item.path));
     const Icon = item.icon;
 
     return (

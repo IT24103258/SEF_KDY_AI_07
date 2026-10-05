@@ -19,6 +19,8 @@
 }
 
 :root[data-theme='light'] {
+  color-scheme: light;
+
   --bg-primary: #EEF2FA;
   --bg-secondary: #ffffff;
   --bg-card: rgba(255, 255, 255, 0.78);
@@ -51,6 +53,8 @@
 }
 
 :root[data-theme='dark'] {
+  color-scheme: dark;
+
   --bg-primary: #0A0F1C;
   --bg-secondary: #101828;
   --bg-card: rgba(22, 30, 48, 0.62);
@@ -402,10 +406,14 @@ button {
 .ff-input-has-icon { padding-left: 40px; }
 .ff-input-error { border-color: var(--danger-color); }
 
-/* Ensure select elements and their dropdown options render with dark background in dark mode */
+/* Ensure select elements and their dropdown options render with correct theme colors */
 select.ff-input {
-  cursor: pointer;
   appearance: auto;
+  cursor: pointer;
+}
+select.ff-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 :root[data-theme='dark'] select.ff-input,
@@ -422,6 +430,12 @@ select.ff-input {
 :root[data-theme='light'] select.ff-input,
 :root[data-theme='light'] select.ff-input option {
   background-color: #ffffff;
+  color: var(--text-primary);
+}
+
+select.ff-input option,
+select.ff-input optgroup {
+  background-color: var(--bg-secondary);
   color: var(--text-primary);
 }
 

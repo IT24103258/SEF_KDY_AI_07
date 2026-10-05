@@ -189,10 +189,19 @@ def execute_workflow(request: WorkflowExecutionRequest):
         scheduling_context["request_id"] = request.request_id
         if step3_result is not None:
             scheduling_context["assigned_technician_id"] = step3_result.output_data.get("top_match_id")
+        if step2_result is not None:
+            scheduling_context["priority"] = step2_result.output_data.get("priority_level", "Normal")
+        if step1_result is not None:
+            scheduling_context["category"] = step1_result.output_data.get("category", "General")
+        scheduling_context["description"] = request.input_context.get("description", "")
 
         scheduling_agent = SchedulingAgent()
         step4_result = scheduling_agent.run_step(scheduling_context)
         steps.append(step4_result)
+
+        if step4_result.status == "REQUIRES_HUMAN_APPROVAL":
+            requires_approval = True
+            approval_reason = "Member 4 Scheduling Agent requires manager approval for schedule proposal."
 
     # The workflow result is derived only from the agents this workflow type
     # actually executed, so an unrelated agent can never affect it.
@@ -211,3 +220,7 @@ def execute_workflow(request: WorkflowExecutionRequest):
     )
 
 app.include_router(router)
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("workflows.orchestrator:app", host="0.0.0.0", port=8001, reload=True)
