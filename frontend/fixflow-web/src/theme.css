@@ -433,6 +433,12 @@ select.ff-input:disabled {
   color: var(--text-primary);
 }
 
+select.ff-input option,
+select.ff-input optgroup {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
 .ff-error-text { color: var(--danger-color); font-size: 0.8rem; }
 
 .ff-card {
