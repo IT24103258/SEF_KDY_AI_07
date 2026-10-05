@@ -46,6 +46,7 @@ public class FixFlowDbContext : DbContext
     public DbSet<ApprovalAction> ApprovalActions => Set<ApprovalAction>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SLAConfiguration> SLAConfigurations => Set<SLAConfiguration>();
+    public DbSet<RequestAttachment> RequestAttachments { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

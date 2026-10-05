@@ -21,7 +21,12 @@ import {
   Reports,
   TechnicianHome,
   CustomerRequests,
-  NotFound
+  NotFound,
+  // ── MEMBER 1 ──────────────────────────────
+  SubmitRequestPage,
+  MyRequestsPage,
+  RequestQueuePage,
+  RequestDetailPage
 } from '../pages/Pages';
 
 import { WorkOrdersPage } from '../pages/WorkOrdersPage';
@@ -29,8 +34,10 @@ import { WorkOrderDetailPage } from '../pages/WorkOrderDetailPage';
 import { ApprovalCenterPage } from '../pages/ApprovalCenterPage';
 import { CalendarPage } from '../pages/CalendarPage';
 import { WorkOrderReportsPage } from '../pages/WorkOrderReportsPage';
+import TechnicianAssignment from '../pages/TechnicianAssignment';
 
 import { getHomePath } from '../utils/roleRoutes';
+import { PriorityDashboard } from '../pages/PriorityDashboard';
 
 /*
 ================================================================================
@@ -211,23 +218,48 @@ export const AppRoutes = () => {
 
       {/* ============================================================
           MEMBER 1 — REQUEST INTAKE & CLASSIFICATION
-          ADD YOUR ROUTES ONLY IN THIS SECTION
           ============================================================ */}
 
-      {/* Example:
-
+      {/* Submit a new request — Requester only */}
       <Route
-        path="/intake"
+        path="/submit-request"
         element={
-          <ProtectedRoute
-            roles={['Requester']}
-          >
-            <RequestIntakePage />
+          <ProtectedRoute roles={['Requester']}>
+            <SubmitRequestPage />
           </ProtectedRoute>
         }
       />
 
-      */}
+      {/* Requester's own request list */}
+      <Route
+        path="/my-requests"
+        element={
+          <ProtectedRoute roles={['Requester']}>
+            <MyRequestsPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Manager / Admin queue — all requests */}
+      <Route
+        path="/request-queue"
+        element={
+          <ProtectedRoute roles={['Manager', 'Administrator']}>
+            <RequestQueuePage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Request detail — ownership enforced by the API */}
+      <Route
+        path="/requests/:id"
+        element={
+          <ProtectedRoute>
+            <RequestDetailPage />
+          </ProtectedRoute>
+        }
+      />
+
 
 
       {/* ============================================================
@@ -235,20 +267,23 @@ export const AppRoutes = () => {
           ADD YOUR ROUTES ONLY IN THIS SECTION
           ============================================================ */}
 
-      {/* Example:
-
       <Route
-        path="/priority-dashboard"
+        path="/priorities"
         element={
-          <ProtectedRoute
-            roles={ADMIN_ROLES}
-          >
-            <RiskDashboardPage />
+          <ProtectedRoute roles={ADMIN_ROLES}>
+            <PriorityDashboard />
           </ProtectedRoute>
         }
       />
 
-      */}
+      <Route
+        path="/priority-dashboard"
+        element={
+          <ProtectedRoute roles={ADMIN_ROLES}>
+            <PriorityDashboard />
+          </ProtectedRoute>
+        }
+      />
 
 
       {/* ============================================================
@@ -263,6 +298,15 @@ export const AppRoutes = () => {
             roles={['Technician']}
           >
             <TechnicianHome />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/assignments"
+        element={
+          <ProtectedRoute>
+            <TechnicianAssignment />
           </ProtectedRoute>
         }
       />
@@ -289,17 +333,6 @@ export const AppRoutes = () => {
       {/* ============================================================
           MEMBER 4 — SCHEDULING & WORK ORDER MANAGEMENT
           ============================================================ */}
-
-      <Route
-        path="/my-requests"
-        element={
-          <ProtectedRoute
-            roles={['Requester']}
-          >
-            <CustomerRequests />
-          </ProtectedRoute>
-        }
-      />
 
       <Route
         path="/work-orders"

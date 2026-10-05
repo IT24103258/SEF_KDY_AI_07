@@ -406,8 +406,7 @@ button {
 .ff-input-has-icon { padding-left: 40px; }
 .ff-input-error { border-color: var(--danger-color); }
 
-/* Native <select> dropdowns: color-scheme on :root renders the popup natively
-   themed per theme; explicit option colors cover browsers that ignore it. */
+/* Ensure select elements and their dropdown options render with correct theme colors */
 select.ff-input {
   appearance: auto;
   cursor: pointer;
@@ -416,9 +415,21 @@ select.ff-input:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
-select.ff-input option,
-select.ff-input optgroup {
+
+:root[data-theme='dark'] select.ff-input,
+:root[data-theme='dark'] select.ff-input option {
   background-color: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+:root[data-theme='dark'] select.ff-input option:checked {
+  background-color: var(--primary-light);
+  color: var(--primary-color);
+}
+
+:root[data-theme='light'] select.ff-input,
+:root[data-theme='light'] select.ff-input option {
+  background-color: #ffffff;
   color: var(--text-primary);
 }
 

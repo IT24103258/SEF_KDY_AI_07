@@ -21,6 +21,7 @@ public class RegisterRequestDto
     public string LastName { get; set; } = string.Empty;
     public string PhoneNumber { get; set; } = string.Empty;
     public string RoleName { get; set; } = "Requester";
+    public string? Specialization { get; set; }
 }
 
 public class UserDto

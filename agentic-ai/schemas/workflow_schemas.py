@@ -34,6 +34,11 @@ class WorkflowExecutionResult(BaseModel):
     workflow_id: str
     request_id: str
     status: str
+    # Additive, backward-compatible planning metadata. Populated by the orchestrator
+    # so each workflow exposes an explicit objective and structured plan (auditable).
+    objective: Optional[str] = None
+    plan: List[str] = Field(default_factory=list)
+    workflow_type: Optional[str] = None
     steps: List[StepExecutionResult] = Field(default_factory=list)
     requires_human_approval: bool = False
     approval_reason: Optional[str] = None
