@@ -185,6 +185,9 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var dbContext = services.GetRequiredService<FixFlowDbContext>();
+
+        await dbContext.Database.MigrateAsync();
+        
         await DatabaseSeeder.SeedAsync(dbContext);
     }
     catch (Exception ex)
