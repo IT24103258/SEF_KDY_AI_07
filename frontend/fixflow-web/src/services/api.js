@@ -55,7 +55,7 @@ export const api = {
 };
 
 // C# Gateway & Standalone Assignment Agent Test URL
-const CSHARP_BASE_URL = 'http://localhost:5000/api/technicians';
+const CSHARP_BASE_URL = `${BASE_URL}/technicians`;
 const STANDALONE_ASSIGNMENT_URL = 'http://localhost:8000/api/agent/assignment/test';
 
 export const technicianApi = {
