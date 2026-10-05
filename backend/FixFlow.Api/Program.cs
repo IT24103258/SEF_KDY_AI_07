@@ -165,9 +165,13 @@ var app = builder.Build();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<GlobalExceptionMiddleware>();
 
-
+// Swagger UI configuration with RoutePrefix set to Empty
 app.UseSwagger();
-app.UseSwaggerUI(c => c.SwaggerEndpoint("/swagger/v1/swagger.json", "FixFlow AI Gateway v1"));
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "FixFlow AI Gateway v1");
+    c.RoutePrefix = string.Empty;
+});
 
 app.UseCors("AllowAll");
 
