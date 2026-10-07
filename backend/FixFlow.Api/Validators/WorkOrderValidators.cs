@@ -10,9 +10,6 @@ public class WorkOrderCreateDtoValidator : AbstractValidator<WorkOrderCreateDto>
         RuleFor(x => x.RequestId)
             .NotEmpty().WithMessage("Request ID is required.");
 
-        RuleFor(x => x.TechnicianId)
-            .NotEmpty().WithMessage("Technician ID is required.");
-
         RuleFor(x => x.Title)
             .NotEmpty().WithMessage("Work order title is required.")
             .MaximumLength(200).WithMessage("Title cannot exceed 200 characters.");

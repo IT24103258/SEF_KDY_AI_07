@@ -83,7 +83,7 @@ public class WorkOrderSummaryDto
 public class WorkOrderCreateDto
 {
     public Guid RequestId { get; set; }
-    public Guid TechnicianId { get; set; }
+    public Guid? TechnicianId { get; set; }
     public Guid? LocationId { get; set; }
     public string Title { get; set; } = string.Empty;
     public string Description { get; set; } = string.Empty;

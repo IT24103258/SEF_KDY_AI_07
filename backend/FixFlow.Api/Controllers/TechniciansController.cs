@@ -56,7 +56,7 @@ public class TechniciansController : ControllerBase
             var jobs = assignments.Select(a => new 
             {
                 assignmentId = a.Id,
-                requestId = a.RequestId,
+                requestId = a.MaintenanceRequestId,
                 requiredSkill = a.ReasoningSummary ?? "General Maintenance",
                 priorityLevel = "Medium",
                 status = a.Status ?? "Assigned",
@@ -80,9 +80,9 @@ public class TechniciansController : ControllerBase
         return Ok(result);
     }
 
-    // 2. GET: api/technicians/5
+    // 2. GET: api/technicians/{id}
     [HttpGet("{id}")]
-    public async Task<IActionResult> GetById(int id)
+    public async Task<IActionResult> GetById(Guid id)
     {
         var tech = await _technicianService.GetTechnicianByIdAsync(id);
         if (tech == null) return NotFound();
@@ -101,62 +101,47 @@ public class TechniciansController : ControllerBase
     [HttpPost("assignment-recommendation")]
     public async Task<IActionResult> GetRecommendation([FromBody] AssignmentRequestDto dto)
     {
-        var result = await _technicianService.RecommendTechnicianAsync(dto);
-        return Ok(result);
+        try
+        {
+            var result = await _technicianService.RecommendTechnicianAsync(dto);
+            return Ok(result);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return UnprocessableEntity(new { message = ex.Message });
+        }
     }
-    
+
     // 5. POST: api/technicians/assign
     [HttpPost("assign")]
     public async Task<IActionResult> Assign([FromBody] AssignmentRequestDto dto)
     {
+        if (dto.RequestId == Guid.Empty || dto.TechnicianId == Guid.Empty)
+        {
+            return BadRequest(new { message = "A valid requestId and technicianId (GUID) are required." });
+        }
+
         try
         {
-            // Parsing the integer-based RequestId received from the frontend into an int
-            int parsedRequestId = 0;
-            if (!int.TryParse(dto.RequestId, out parsedRequestId))
+            var success = await _technicianService.AssignTechnicianAsync(dto.RequestId, dto.TechnicianId);
+            if (!success)
             {
-                parsedRequestId = Math.Abs(dto.RequestId?.GetHashCode() ?? 1);
+                return BadRequest(new { message = "Assignment could not be completed." });
             }
 
-            // Parsing the integer-based TechnicianId received from the frontend into an int.
-            int parsedTechIntId = 0;
-            int.TryParse(dto.TechnicianId, out parsedTechIntId);
-
-            // Retrieving all technicians from the database and finding the one that matches the hash code of the ID received from the DTO.
-            var allTechnicians = await _context.Technicians.ToListAsync();
-            var technician = allTechnicians.FirstOrDefault(t => Math.Abs(t.Id.GetHashCode()) == parsedTechIntId);
-
-            if (technician == null)
-            {
-                return BadRequest(new { message = $"Technician with ID {dto.TechnicianId} was not found in the database." });
-            }
-
-            // Preparing the assignment using the actual technician ID (whether GUID or int).
-            var assignment = new Assignment
-            {
-                RequestId = parsedRequestId,
-                TechnicianId = technician.Id,
-                Status = "Assigned",
-                AssignedAt = DateTime.UtcNow,
-                MatchScore = 0.90,
-                ReasoningSummary = "Assigned via AI Recommendation Agent"
-            };
-
-            // Adding the assignment to the database
-            _context.Set<Assignment>().Add(assignment); 
-
-            // Updating the technician's status to 'Busy' (IsAvailable = false)
-            technician.IsAvailable = false;
-
-            await _context.SaveChangesAsync();
-
-            return Ok(new { message = "Technician assigned successfully!", assignmentId = assignment.Id });
+            return Ok(new { message = "Technician assigned successfully!" });
         }
-        catch (Exception ex)
+        catch (KeyNotFoundException ex)
         {
-            var innerMessage = ex.InnerException?.Message ?? ex.Message;
-            Console.WriteLine($"DB Save Error: {innerMessage}");
-            return StatusCode(500, new { message = $"Internal server error: {innerMessage}" });
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return UnprocessableEntity(new { message = ex.Message });
         }
     }
 

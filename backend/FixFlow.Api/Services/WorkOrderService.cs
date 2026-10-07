@@ -202,15 +202,36 @@ public class WorkOrderService : IWorkOrderService
         if (req == null)
             throw new NotFoundException($"Maintenance request '{dto.RequestId}' was not found.");
 
-        if (dto.TechnicianId == Guid.Empty)
-            throw new ArgumentException("A valid Technician ID is required.");
+        var assignment = await _context.Set<Assignment>()
+            .Where(a => a.MaintenanceRequestId == req.Id && a.Status == "Assigned")
+            .OrderByDescending(a => a.AssignedAt)
+            .FirstOrDefaultAsync();
 
-        var tech = await _context.Technicians
-            .Include(t => t.User)
-            .Include(t => t.Skills)
-            .FirstOrDefaultAsync(t => t.Id == dto.TechnicianId || t.UserId == dto.TechnicianId);
-        if (tech == null)
-            throw new NotFoundException($"Technician '{dto.TechnicianId}' was not found.");
+        Technician tech;
+        if (assignment != null)
+        {
+            tech = await _context.Technicians
+                .Include(t => t.User)
+                .Include(t => t.Skills)
+                .FirstOrDefaultAsync(t => t.Id == assignment.TechnicianId)
+                ?? throw new NotFoundException($"Assigned technician '{assignment.TechnicianId}' was not found.");
+        }
+        else
+        {
+            if (!dto.TechnicianId.HasValue || dto.TechnicianId.Value == Guid.Empty)
+                throw new ArgumentException("No assignment exists for this request. Explicitly select a technician to create the work order.");
+
+            tech = await _context.Technicians
+                .Include(t => t.User)
+                .Include(t => t.Skills)
+                .FirstOrDefaultAsync(t => t.Id == dto.TechnicianId.Value || t.UserId == dto.TechnicianId.Value)
+                ?? throw new NotFoundException($"Technician '{dto.TechnicianId}' was not found.");
+        }
+
+        var priorityAssessment = await _context.Set<PriorityAssessment>()
+            .Where(p => p.RequestId == req.Id && !p.IsDeleted)
+            .OrderByDescending(p => p.UpdatedAt ?? p.CreatedAt)
+            .FirstOrDefaultAsync();
 
         await WorkOrderNumberLock.WaitAsync();
         string workOrderNumber;
@@ -224,7 +245,8 @@ public class WorkOrderService : IWorkOrderService
             WorkOrderNumberLock.Release();
         }
 
-        var priority = Enum.TryParse<WorkOrderPriority>(dto.Priority, true, out var p) ? p : WorkOrderPriority.Medium;
+        var effectivePriority = !string.IsNullOrWhiteSpace(priorityAssessment?.Priority) ? priorityAssessment.Priority : dto.Priority;
+        var priority = Enum.TryParse<WorkOrderPriority>(effectivePriority, true, out var p) ? p : WorkOrderPriority.Medium;
         var durationMinutes = dto.EstimatedDurationMinutes > 0 ? dto.EstimatedDurationMinutes : 60;
 
         var scheduledStartUtc = dto.ScheduledStartTime.HasValue ? SchedulingService.NormalizeToUtc(dto.ScheduledStartTime.Value) : (DateTime?)null;
@@ -267,7 +289,7 @@ public class WorkOrderService : IWorkOrderService
                 scheduledStartUtc.Value,
                 scheduledEndUtc.Value,
                 durationMinutes,
-                dto.Priority,
+                effectivePriority,
                 slaDeadlineUtc);
 
             var isConflict = !originalValidation.IsConflictFree;
@@ -1470,13 +1492,23 @@ public class WorkOrderService : IWorkOrderService
 
     public async Task<List<MaintenanceRequestSummaryDto>> GetAvailableRequestsAsync()
     {
-        return await _context.MaintenanceRequests
+        var requests = await _context.MaintenanceRequests
             .Include(r => r.Location)
             .Include(r => r.Category)
             .Include(r => r.Requester)
             .Where(r => r.Status != RequestStatus.Cancelled && r.Status != RequestStatus.Completed)
             .OrderByDescending(r => r.CreatedAt)
-            .Select(r => new MaintenanceRequestSummaryDto
+            .ToListAsync();
+
+        var requestIds = requests.Select(r => r.Id).ToList();
+        var assessments = await _context.Set<PriorityAssessment>()
+            .Where(p => requestIds.Contains(p.RequestId) && !p.IsDeleted)
+            .ToListAsync();
+        var priorityByRequestId = assessments
+            .GroupBy(p => p.RequestId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(p => p.UpdatedAt ?? p.CreatedAt).First().Priority);
+
+        return requests.Select(r => new MaintenanceRequestSummaryDto
             {
                 Id = r.Id,
                 RequestNumber = r.RequestNumber,
@@ -1486,14 +1518,16 @@ public class WorkOrderService : IWorkOrderService
                 LocationId = r.LocationId,
                 LocationName = r.Location != null ? r.Location.Name : "Unassigned",
                 Building = r.Location != null ? r.Location.Building : string.Empty,
-                Priority = r.Category != null ? r.Category.DefaultPriority : "Medium",
+                Priority = priorityByRequestId.TryGetValue(r.Id, out var assessedPriority) && !string.IsNullOrWhiteSpace(assessedPriority)
+                    ? assessedPriority
+                    : (r.Category != null ? r.Category.DefaultPriority : "Medium"),
                 CategoryId = r.CategoryId,
                 CategoryName = r.Category != null ? r.Category.Name : "General",
                 RequesterId = r.RequesterId,
                 RequesterName = r.Requester != null ? $"{r.Requester.FirstName} {r.Requester.LastName}" : "Unknown",
                 CreatedAt = r.CreatedAt
             })
-            .ToListAsync();
+            .ToList();
     }
 
     public async Task<List<TechnicianSummaryDto>> GetTechniciansAsync()

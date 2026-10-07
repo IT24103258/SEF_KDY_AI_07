@@ -90,18 +90,29 @@ public class AuthService : IAuthService
 
         if (role.Name.Equals("Technician", StringComparison.OrdinalIgnoreCase))
         {
+            var specialization = !string.IsNullOrEmpty(request.Specialization) ? request.Specialization : "General";
+
             var technician = new Technician
             {
                 Id = Guid.NewGuid(),
                 UserId = user.Id,
                 EmployeeId = $"TECH-{new Random().Next(100, 999)}",
-                Specialization = !string.IsNullOrEmpty(request.Specialization) ? request.Specialization : "General",
+                Specialization = specialization,
                 IsAvailable = true,
                 CurrentLatitude = 0.0,
                 CurrentLongitude = 0.0,
                 IsDeleted = false,
                 CreatedAt = DateTime.UtcNow
             };
+
+            var canonicalSkill = await _context.Skills
+                .FirstOrDefaultAsync(s =>
+                    s.Name.ToLower() == specialization.ToLower() ||
+                    s.Category.ToLower() == specialization.ToLower());
+            if (canonicalSkill != null)
+            {
+                technician.Skills = new List<Skill> { canonicalSkill };
+            }
 
             await _context.Technicians.AddAsync(technician);
             await _context.SaveChangesAsync();

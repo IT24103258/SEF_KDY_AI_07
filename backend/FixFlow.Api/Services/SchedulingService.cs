@@ -224,13 +224,25 @@ public class SchedulingService : ISchedulingService
         if (technician == null)
             throw new NotFoundException($"Technician '{request.TechnicianId}' not found.");
 
+        var priorityAssessment = await _context.Set<PriorityAssessment>()
+            .Where(p => p.RequestId == maintenanceRequest.Id && !p.IsDeleted)
+            .OrderByDescending(p => p.UpdatedAt ?? p.CreatedAt)
+            .FirstOrDefaultAsync();
+
+        if (!string.IsNullOrWhiteSpace(priorityAssessment?.Priority))
+        {
+            request.Priority = priorityAssessment.Priority;
+        }
+
         // Determine SLA deadline if not provided
         var slaDeadline = request.SlaDeadline.HasValue ? NormalizeToUtc(request.SlaDeadline.Value) : (DateTime?)null;
         if (!slaDeadline.HasValue)
         {
             var slaConfig = await _context.SLAConfigurations
                 .FirstOrDefaultAsync(s => s.PriorityLevel == request.Priority);
-            var resolutionHours = slaConfig?.ResolutionTimeHours ?? (request.Priority == "Critical" ? 4 : request.Priority == "High" ? 8 : 24);
+            var resolutionHours = slaConfig?.ResolutionTimeHours
+                ?? priorityAssessment?.ResolutionTimeHours
+                ?? 24;
             slaDeadline = DateTime.UtcNow.AddHours(resolutionHours);
         }
 

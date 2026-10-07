@@ -2,7 +2,7 @@ namespace FixFlow.Api.Models;
 
 public class Assignment : BaseEntity
 {
-    public int RequestId { get; set; }
+    public Guid? MaintenanceRequestId { get; set; }
     public MaintenanceRequest? MaintenanceRequest { get; set; }
 
     public Guid TechnicianId { get; set; } 

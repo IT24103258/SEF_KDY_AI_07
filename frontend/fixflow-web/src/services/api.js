@@ -90,15 +90,14 @@ export const technicianApi = {
   },
 
   assignTechnician: async (assignmentData) => {
-    const rawReqId = assignmentData.requestId || assignmentData.request_id || "101";
-    const stringReqId = typeof rawReqId === 'number' ? String(rawReqId) : String(rawReqId);
-    const numericTechId = String(assignmentData.technicianId || assignmentData.technician_id || "1").replace(/\D/g, '') || "1";
+    const stringReqId = String(assignmentData.requestId || assignmentData.request_id || "");
+    const techId = String(assignmentData.technicianId || assignmentData.technician_id || "");
 
     const payload = {
       RequestId: stringReqId,
-      RequiredSkill: String(assignmentData.requiredSkill || assignmentData.required_skill || "Electrical"),
+      RequiredSkill: String(assignmentData.requiredSkill || assignmentData.required_skill || ""),
       PriorityLevel: String(assignmentData.priorityLevel || assignmentData.priority || "Medium"),
-      TechnicianId: numericTechId
+      TechnicianId: techId
     };
 
     const response = await fetch(`${CSHARP_BASE_URL}/assign`, {

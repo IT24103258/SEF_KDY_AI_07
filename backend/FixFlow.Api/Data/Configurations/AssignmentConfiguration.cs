@@ -19,6 +19,10 @@ public class AssignmentConfiguration : IEntityTypeConfiguration<Assignment>
                .HasMaxLength(50)
                .HasDefaultValue("Recommended");
 
+        builder.HasOne(a => a.MaintenanceRequest)
+               .WithMany()
+               .HasForeignKey(a => a.MaintenanceRequestId);
+
         builder.HasOne(a => a.Technician)
                .WithMany(t => t.Assignments)
                .HasForeignKey(a => a.TechnicianId)

@@ -1,4 +1,3 @@
-using System.Net.Http.Json;
 using FixFlow.Api.Data;
 using FixFlow.Api.DTOs;
 using FixFlow.Api.Interfaces;
@@ -18,6 +17,88 @@ public class TechnicianService : ITechnicianService
         _httpClient = httpClient;
     }
 
+    private static TechnicianDto MapToDto(Technician t)
+    {
+        return new TechnicianDto
+        {
+            Id = t.Id,
+            UserId = t.UserId.ToString(),
+            EmployeeCode = t.EmployeeId,
+            FullName = t.User != null ? $"{t.User.FirstName} {t.User.LastName}" : t.EmployeeId,
+            Phone = t.User?.PhoneNumber ?? "N/A",
+            Status = t.IsAvailable ? "Available" : "Busy",
+            MaxDailyJobs = 5,
+            Skills = !string.IsNullOrEmpty(t.Specialization)
+                ? new List<string> { t.Specialization }
+                : t.Skills.Select(s => s.Name).ToList()
+        };
+    }
+
+    /// <summary>
+    /// Resolves a skill reference (Skill.Id, Skill.Name, or Skill.Category — the UI/AI
+    /// uses category values like "Elevator/Lift") to the canonical Skill entity.
+    /// </summary>
+    private async Task<Skill?> ResolveSkillAsync(string? skillRef)
+    {
+        if (string.IsNullOrWhiteSpace(skillRef)) return null;
+
+        var value = skillRef.Trim();
+
+        if (Guid.TryParse(value, out var id))
+        {
+            var byId = await _context.Skills.FirstOrDefaultAsync(s => s.Id == id);
+            if (byId != null) return byId;
+        }
+
+        return await _context.Skills
+            .FirstOrDefaultAsync(s =>
+                s.Name.ToLower() == value.ToLower() ||
+                s.Category.ToLower() == value.ToLower());
+    }
+
+    private static (double Score, bool SkillMatched) EvaluateTechnician(Technician tech, string targetSkill, Skill? canonicalSkill)
+    {
+        double score = 0.0;
+        bool matched = false;
+
+        if (!string.IsNullOrEmpty(targetSkill))
+        {
+            if (!string.IsNullOrEmpty(tech.Specialization) &&
+                (tech.Specialization.Contains(targetSkill, StringComparison.OrdinalIgnoreCase) ||
+                 targetSkill.Contains(tech.Specialization, StringComparison.OrdinalIgnoreCase)))
+            {
+                score += 0.80;
+                matched = true;
+            }
+
+            if (tech.Skills != null && tech.Skills.Any(s =>
+                (canonicalSkill != null && s.Id == canonicalSkill.Id) ||
+                (!string.IsNullOrEmpty(s.Name) &&
+                 (s.Name.Contains(targetSkill, StringComparison.OrdinalIgnoreCase) ||
+                  targetSkill.Contains(s.Name, StringComparison.OrdinalIgnoreCase)))))
+            {
+                score += 0.90;
+                matched = true;
+            }
+        }
+
+        if (tech.IsAvailable)
+        {
+            score += 0.10;
+        }
+
+        return (score, matched);
+    }
+
+    private async Task<string?> GetRequiredSkillFromClassificationAsync(Guid maintenanceRequestId)
+    {
+        var classification = await _context.Set<RequestClassification>()
+            .OrderByDescending(c => c.CreatedAt)
+            .FirstOrDefaultAsync(c => c.MaintenanceRequestId == maintenanceRequestId);
+
+        return classification?.RequiredSkill;
+    }
+
     public async Task<IEnumerable<TechnicianDto>> GetAllTechniciansAsync(string? skill)
     {
         var query = _context.Technicians
@@ -32,43 +113,19 @@ public class TechnicianService : ITechnicianService
 
         var technicians = await query.ToListAsync();
 
-        return technicians.Select(t => new TechnicianDto
-        {
-            Id = Math.Abs(t.Id.GetHashCode()), 
-            UserId = t.UserId.ToString(),
-            EmployeeCode = t.EmployeeId,
-            FullName = t.User != null ? $"{t.User.FirstName} {t.User.LastName}" : t.EmployeeId,
-            Phone = t.User?.PhoneNumber ?? "N/A",
-            Status = t.IsAvailable ? "Available" : "Busy",
-            MaxDailyJobs = 5,
-            Skills = !string.IsNullOrEmpty(t.Specialization) 
-                ? new List<string> { t.Specialization } 
-                : t.Skills.Select(s => s.Name).ToList()
-        });
+        return technicians.Select(MapToDto);
     }
 
-    public async Task<TechnicianDto?> GetTechnicianByIdAsync(int id)
+    public async Task<TechnicianDto?> GetTechnicianByIdAsync(Guid id)
     {
         var tech = await _context.Technicians
             .Include(t => t.User)
             .Include(t => t.Skills)
-            .FirstOrDefaultAsync(t => Math.Abs(t.Id.GetHashCode()) == id);
+            .FirstOrDefaultAsync(t => t.Id == id);
 
         if (tech == null) return null;
 
-        return new TechnicianDto
-        {
-            Id = id,
-            UserId = tech.UserId.ToString(),
-            EmployeeCode = tech.EmployeeId,
-            FullName = tech.User != null ? $"{tech.User.FirstName} {tech.User.LastName}" : tech.EmployeeId,
-            Phone = tech.User?.PhoneNumber ?? "N/A",
-            Status = tech.IsAvailable ? "Available" : "Busy",
-            MaxDailyJobs = 5,
-            Skills = !string.IsNullOrEmpty(tech.Specialization) 
-                ? new List<string> { tech.Specialization } 
-                : tech.Skills.Select(s => s.Name).ToList()
-        };
+        return MapToDto(tech);
     }
 
     public async Task<TechnicianDto> CreateTechnicianAsync(CreateTechnicianDto dto)
@@ -85,90 +142,69 @@ public class TechnicianService : ITechnicianService
 
         if (dto.SkillIds != null && dto.SkillIds.Any())
         {
-            var selectedSkills = await _context.Skills.Take(dto.SkillIds.Count).ToListAsync();
+            var selectedSkills = new List<Skill>();
+            foreach (var skillRef in dto.SkillIds.Where(s => !string.IsNullOrWhiteSpace(s)))
+            {
+                var skill = await ResolveSkillAsync(skillRef);
+                if (skill != null && selectedSkills.All(s => s.Id != skill.Id))
+                {
+                    selectedSkills.Add(skill);
+                }
+            }
             tech.Skills = selectedSkills;
         }
 
         _context.Technicians.Add(tech);
         await _context.SaveChangesAsync();
 
-        return new TechnicianDto
-        {
-            Id = Math.Abs(tech.Id.GetHashCode()),
-            UserId = tech.UserId.ToString(),
-            EmployeeCode = tech.EmployeeId,
-            FullName = tech.EmployeeId,
-            Phone = "N/A",
-            Status = "Available",
-            MaxDailyJobs = 5,
-            Skills = tech.Skills.Select(s => s.Name).ToList()
-        };
+        var created = await _context.Technicians
+            .Include(t => t.User)
+            .Include(t => t.Skills)
+            .FirstAsync(t => t.Id == tech.Id);
+
+        return MapToDto(created);
     }
 
     public async Task<AssignmentRecommendationDto> RecommendTechnicianAsync(AssignmentRequestDto requestDto)
     {
-        // Dynamically retrieving only the technicians currently available from the database.
-        var availableTechnicians = await _context.Technicians
+        var request = await _context.Set<MaintenanceRequest>()
+            .FirstOrDefaultAsync(r => r.Id == requestDto.RequestId);
+        if (request == null)
+        {
+            throw new KeyNotFoundException($"Maintenance request '{requestDto.RequestId}' was not found.");
+        }
+
+        var technicians = await _context.Technicians
             .Include(t => t.User)
             .Include(t => t.Skills)
-            .Where(t => t.IsAvailable)
             .ToListAsync();
 
-        long finalRequestId = 0;
-        long.TryParse(requestDto.RequestId, out var parsedLong);
-        finalRequestId = parsedLong;
+        string requiredSkill = !string.IsNullOrWhiteSpace(requestDto.RequiredSkill)
+            ? requestDto.RequiredSkill.Trim()
+            : (await GetRequiredSkillFromClassificationAsync(request.Id)) ?? string.Empty;
 
-        if (!availableTechnicians.Any())
+        Skill? canonicalSkill = await ResolveSkillAsync(requiredSkill);
+
+        IEnumerable<Technician> pool = technicians;
+        if (!string.IsNullOrEmpty(requiredSkill))
         {
-            return new AssignmentRecommendationDto
+            pool = technicians
+                .Where(t => EvaluateTechnician(t, requiredSkill, canonicalSkill).SkillMatched)
+                .ToList();
+
+            if (!pool.Any())
             {
-                RequestId = (int)finalRequestId,
-                RecommendedTechnicianId = 0,
-                TechnicianName = "N/A",
-                MatchScore = 0.0,
-                ReasoningSummary = "No available technicians found in the system at the moment.",
-                Status = "Failed"
-            };
+                throw new InvalidOperationException($"No technician has the required skill '{requiredSkill}'.");
+            }
         }
 
         Technician? bestMatch = null;
         double highestScore = 0.0;
-        string targetSkill = requestDto.RequiredSkill?.Trim() ?? string.Empty;
 
-        foreach (var tech in availableTechnicians)
+        foreach (var tech in pool)
         {
-            double currentScore = 0.0;
-            bool skillMatched = false;
+            double currentScore = EvaluateTechnician(tech, requiredSkill, canonicalSkill).Score;
 
-            // Checking if the specialization matches.
-            if (!string.IsNullOrEmpty(tech.Specialization) && !string.IsNullOrEmpty(targetSkill))
-            {
-                if (tech.Specialization.Contains(targetSkill, StringComparison.OrdinalIgnoreCase) || 
-                    targetSkill.Contains(tech.Specialization, StringComparison.OrdinalIgnoreCase))
-                {
-                    currentScore += 0.80;
-                    skillMatched = true;
-                }
-            }
-
-            // Checking if the technician's skills match the required skill.
-            if (tech.Skills != null && tech.Skills.Any(s => !string.IsNullOrEmpty(s.Name) && 
-                (s.Name.Contains(targetSkill, StringComparison.OrdinalIgnoreCase) || 
-                 targetSkill.Contains(s.Name, StringComparison.OrdinalIgnoreCase))))
-            {
-                currentScore += 0.90;
-                skillMatched = true;
-            }
-
-            // Adding extra points for being currently available.
-            currentScore += 0.10;
-
-            if (!skillMatched)
-            {
-                currentScore += 0.30; 
-            }
-
-            // Finding the technician with the highest score.
             if (currentScore > highestScore)
             {
                 highestScore = currentScore;
@@ -178,52 +214,115 @@ public class TechnicianService : ITechnicianService
 
         if (bestMatch == null)
         {
-            bestMatch = availableTechnicians.First();
+            bestMatch = pool.First();
             highestScore = 0.50;
         }
 
-        string techFullName = bestMatch?.User != null 
-            ? $"{bestMatch.User.FirstName} {bestMatch.User.LastName}" 
-            : (bestMatch?.EmployeeId ?? "No Technician Assigned");
+        double finalScore = Math.Round(Math.Min(highestScore, 1.0), 2);
 
-        string matchType = highestScore >= 0.70 ? "AI Skill Match" : "General Availability Match";
-        string reasoningSummary = $"{matchType}: Selected '{techFullName}' based on dynamic evaluation for skill '{targetSkill}' with priority '{requestDto.PriorityLevel}'.";
+        string techFullName = bestMatch.User != null
+            ? $"{bestMatch.User.FirstName} {bestMatch.User.LastName}"
+            : bestMatch.EmployeeId;
+
+        string matchType = finalScore >= 0.70 ? "AI Skill Match" : "General Availability Match";
+        string reasoningSummary = $"{matchType}: Selected '{techFullName}' based on dynamic evaluation for skill '{requiredSkill}' with priority '{requestDto.PriorityLevel}'.";
+
+        var existingRecommendation = await _context.Set<Assignment>()
+            .Where(a => a.MaintenanceRequestId == request.Id && a.Status == "Recommended")
+            .OrderByDescending(a => a.AssignedAt)
+            .FirstOrDefaultAsync();
+
+        if (existingRecommendation != null)
+        {
+            existingRecommendation.TechnicianId = bestMatch.Id;
+            existingRecommendation.MatchScore = finalScore;
+            existingRecommendation.ReasoningSummary = reasoningSummary;
+            existingRecommendation.AssignedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            _context.Set<Assignment>().Add(new Assignment
+            {
+                Id = Guid.NewGuid(),
+                MaintenanceRequestId = request.Id,
+                TechnicianId = bestMatch.Id,
+                MatchScore = finalScore,
+                ReasoningSummary = reasoningSummary,
+                Status = "Recommended",
+                AssignedAt = DateTime.UtcNow
+            });
+        }
+
+        await _context.SaveChangesAsync();
 
         return new AssignmentRecommendationDto
         {
-            RequestId = (int)finalRequestId, 
-            RecommendedTechnicianId = bestMatch != null ? Math.Abs(bestMatch.Id.GetHashCode()) : 0,
+            RequestId = request.Id,
+            RecommendedTechnicianId = bestMatch.Id,
             TechnicianName = techFullName,
-            MatchScore = Math.Round(Math.Min(highestScore, 1.0), 2),
+            MatchScore = finalScore,
             ReasoningSummary = reasoningSummary,
             Status = "Recommended"
         };
     }
 
-    public async Task<bool> AssignTechnicianAsync(int requestId, int technicianId)
+    public async Task<bool> AssignTechnicianAsync(Guid requestId, Guid technicianId)
     {
-        var tech = await _context.Technicians
-            .FirstOrDefaultAsync(t => Math.Abs(t.Id.GetHashCode()) == technicianId);
-
-        if (tech != null)
+        var request = await _context.Set<MaintenanceRequest>()
+            .FirstOrDefaultAsync(r => r.Id == requestId);
+        if (request == null)
         {
-            tech.IsAvailable = false;
+            throw new KeyNotFoundException($"Maintenance request '{requestId}' was not found.");
+        }
 
-            // Inserting a record into the Assignment table (RequestId is already an int)
-            var assignment = new Assignment
+        var tech = await _context.Technicians
+            .Include(t => t.Skills)
+            .FirstOrDefaultAsync(t => t.Id == technicianId);
+        if (tech == null)
+        {
+            throw new KeyNotFoundException($"Technician '{technicianId}' was not found.");
+        }
+
+        string requiredSkill = (await GetRequiredSkillFromClassificationAsync(request.Id)) ?? string.Empty;
+        Skill? canonicalSkill = await ResolveSkillAsync(requiredSkill);
+
+        if (!string.IsNullOrEmpty(requiredSkill) && !EvaluateTechnician(tech, requiredSkill, canonicalSkill).SkillMatched)
+        {
+            throw new InvalidOperationException($"Technician '{tech.EmployeeId}' does not have the required skill '{requiredSkill}'.");
+        }
+
+        var assignment = await _context.Set<Assignment>()
+            .Where(a => a.MaintenanceRequestId == request.Id)
+            .OrderByDescending(a => a.AssignedAt)
+            .FirstOrDefaultAsync();
+
+        if (assignment != null)
+        {
+            assignment.TechnicianId = tech.Id;
+            assignment.Status = "Assigned";
+            assignment.AssignedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            var evaluation = EvaluateTechnician(tech, requiredSkill, canonicalSkill);
+            double finalScore = Math.Round(Math.Min(evaluation.Score, 1.0), 2);
+
+            _context.Set<Assignment>().Add(new Assignment
             {
                 Id = Guid.NewGuid(),
-                RequestId = requestId,   
+                MaintenanceRequestId = request.Id,
                 TechnicianId = tech.Id,
-                MatchScore = 85.0,
-                ReasoningSummary = "Assigned successfully via AI recommendation.",
+                MatchScore = finalScore,
+                ReasoningSummary = evaluation.SkillMatched
+                    ? $"Manager-approved assignment for skill '{requiredSkill}'."
+                    : "Manager-approved assignment (no specific skill requirement).",
                 Status = "Assigned",
                 AssignedAt = DateTime.UtcNow
-            };
-
-            _context.Set<Assignment>().Add(assignment);
-            return await _context.SaveChangesAsync() > 0;
+            });
         }
-        return false;
+
+        tech.IsAvailable = false;
+
+        return await _context.SaveChangesAsync() > 0;
     }
 }
