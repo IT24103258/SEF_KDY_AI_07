@@ -7,6 +7,7 @@ using FixFlow.Api.Interfaces;
 using FixFlow.Api.Models;
 using FixFlow.Api.Models.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace FixFlow.Api.Services;
 
@@ -18,17 +19,23 @@ public class WorkOrderService : IWorkOrderService
     private readonly ISchedulingService _schedulingService;
     private readonly IAuditLogService _auditLogService;
     private readonly INotificationService _notificationService;
+    private readonly IPythonSchedulingAgentClient? _pythonAgentClient;
+    private readonly ILogger<WorkOrderService>? _logger;
 
     public WorkOrderService(
         FixFlowDbContext context,
         ISchedulingService schedulingService,
         IAuditLogService auditLogService,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        IPythonSchedulingAgentClient? pythonAgentClient = null,
+        ILogger<WorkOrderService>? logger = null)
     {
         _context = context;
         _schedulingService = schedulingService;
         _auditLogService = auditLogService;
         _notificationService = notificationService;
+        _pythonAgentClient = pythonAgentClient;
+        _logger = logger;
     }
 
     public async Task<PagedResultDto<WorkOrderSummaryDto>> GetWorkOrdersAsync(
@@ -133,10 +140,17 @@ public class WorkOrderService : IWorkOrderService
                 Id = w.Id,
                 WorkOrderNumber = w.WorkOrderNumber,
                 Title = w.Title,
+                Description = w.Description,
                 RequestId = w.RequestId,
                 RequestNumber = w.Request != null ? w.Request.RequestNumber : string.Empty,
+                RequestTitle = w.Request != null ? w.Request.Title : string.Empty,
+                TechnicianId = w.TechnicianId,
                 TechnicianName = w.Technician != null && w.Technician.User != null ? $"{w.Technician.User.FirstName} {w.Technician.User.LastName}" : "Unassigned",
+                TechnicianSpecialization = w.Technician?.Specialization ?? string.Empty,
+                LocationId = w.LocationId,
                 LocationName = w.Location != null ? w.Location.Name : "Unassigned",
+                Building = w.Location?.Building ?? string.Empty,
+                Room = w.Location?.Room ?? string.Empty,
                 Priority = w.Priority.ToString(),
                 Status = w.Status.ToString(),
                 RequestedStartTime = latestProposal != null && latestProposal.RequestedStartTime.Year > 1 ? latestProposal.RequestedStartTime : null,
@@ -146,6 +160,8 @@ public class WorkOrderService : IWorkOrderService
                 EstimatedDurationMinutes = w.EstimatedDurationMinutes,
                 SLADeadline = w.SLADeadline,
                 ConflictDetected = w.ConflictDetected,
+                AiDecisionSummary = w.AiDecisionSummary,
+                ConflictDetailsJson = w.ConflictDetailsJson,
                 CreatedAt = w.CreatedAt
             };
         }).ToList();
@@ -203,30 +219,19 @@ public class WorkOrderService : IWorkOrderService
             throw new NotFoundException($"Maintenance request '{dto.RequestId}' was not found.");
 
         var assignment = await _context.Set<Assignment>()
-            .Where(a => a.MaintenanceRequestId == req.Id && a.Status == "Assigned")
+            .Where(a => a.MaintenanceRequestId == req.Id &&
+                        (a.Status == "Assigned" || a.Status == "Recommended"))
             .OrderByDescending(a => a.AssignedAt)
             .FirstOrDefaultAsync();
 
-        Technician tech;
-        if (assignment != null)
-        {
-            tech = await _context.Technicians
-                .Include(t => t.User)
-                .Include(t => t.Skills)
-                .FirstOrDefaultAsync(t => t.Id == assignment.TechnicianId)
-                ?? throw new NotFoundException($"Assigned technician '{assignment.TechnicianId}' was not found.");
-        }
-        else
-        {
-            if (!dto.TechnicianId.HasValue || dto.TechnicianId.Value == Guid.Empty)
-                throw new ArgumentException("No assignment exists for this request. Explicitly select a technician to create the work order.");
+        if (assignment == null)
+            throw new ArgumentException("No technician has been assigned to this request. Complete technician assignment before creating the work order.");
 
-            tech = await _context.Technicians
-                .Include(t => t.User)
-                .Include(t => t.Skills)
-                .FirstOrDefaultAsync(t => t.Id == dto.TechnicianId.Value || t.UserId == dto.TechnicianId.Value)
-                ?? throw new NotFoundException($"Technician '{dto.TechnicianId}' was not found.");
-        }
+        var tech = await _context.Technicians
+            .Include(t => t.User)
+            .Include(t => t.Skills)
+            .FirstOrDefaultAsync(t => t.Id == assignment.TechnicianId)
+            ?? throw new NotFoundException($"Assigned technician '{assignment.TechnicianId}' was not found.");
 
         var priorityAssessment = await _context.Set<PriorityAssessment>()
             .Where(p => p.RequestId == req.Id && !p.IsDeleted)
@@ -253,6 +258,33 @@ public class WorkOrderService : IWorkOrderService
         var scheduledEndUtc = dto.ScheduledEndTime.HasValue ? SchedulingService.NormalizeToUtc(dto.ScheduledEndTime.Value) : (DateTime?)null;
         var slaDeadlineUtc = dto.SLADeadline.HasValue ? SchedulingService.NormalizeToUtc(dto.SLADeadline.Value) : (DateTime?)null;
 
+        // Compute default SLA deadline if not provided
+        // Business rule: Use existing Priority Assessment SLA when available, otherwise fall back to SLAConfiguration
+        if (!slaDeadlineUtc.HasValue)
+        {
+            int resolutionHours;
+            DateTime slaBaseTime;
+
+            if (priorityAssessment != null)
+            {
+                // Use Priority Assessment SLA (already determined by Component 2)
+                resolutionHours = priorityAssessment.ResolutionTimeHours;
+                // Calculate from request creation time, not current time
+                slaBaseTime = req.CreatedAt;
+            }
+            else
+            {
+                // Fallback to SLAConfiguration only when no Priority Assessment exists
+                var requestPriority = req.Category?.DefaultPriority ?? dto.Priority ?? "Medium";
+                var slaConfig = await _context.SLAConfigurations
+                    .FirstOrDefaultAsync(s => s.PriorityLevel == requestPriority);
+                resolutionHours = slaConfig?.ResolutionTimeHours ?? 24;
+                slaBaseTime = req.CreatedAt;
+            }
+
+            slaDeadlineUtc = slaBaseTime.AddHours(resolutionHours);
+        }
+
         var requestedStartUtc = scheduledStartUtc;
         var requestedEndUtc = scheduledEndUtc;
 
@@ -278,6 +310,104 @@ public class WorkOrderService : IWorkOrderService
 
         var approvalReason = string.Empty;
 
+        // Python Scheduling Agent invocation (advisory — C# validation remains authoritative)
+        PythonSchedulingResult? pythonResult = null;
+        bool pythonAgentCalled = false;
+        if (_pythonAgentClient != null && scheduledStartUtc.HasValue && scheduledEndUtc.HasValue)
+        {
+            try
+            {
+                pythonAgentCalled = true;
+
+                var activeStatuses = new[]
+                {
+                    WorkOrderStatus.Proposed, WorkOrderStatus.PendingManagerApproval,
+                    WorkOrderStatus.Approved, WorkOrderStatus.Scheduled,
+                    WorkOrderStatus.InProgress, WorkOrderStatus.Paused
+                };
+
+                var existingBookingsArray = await _context.Set<WorkOrder>()
+                    .Where(w => !w.IsDeleted &&
+                                w.TechnicianId == tech.Id &&
+                                activeStatuses.Contains(w.Status) &&
+                                w.ScheduledStartTime.HasValue &&
+                                w.ScheduledEndTime.HasValue)
+                    .Select(w => new
+                    {
+                        work_order_id = w.Id.ToString(),
+                        title = w.Title,
+                        start_time = w.ScheduledStartTime!.Value.ToString("o"),
+                        end_time = w.ScheduledEndTime!.Value.ToString("o")
+                    })
+                    .ToListAsync();
+
+                var proposedStartLocal = SchedulingService.ConvertToLocal(scheduledStartUtc.Value);
+                var dayOfWeek = (int)proposedStartLocal.DayOfWeek;
+                var bh = await _context.Set<BusinessHours>().FirstOrDefaultAsync(b => b.DayOfWeek == dayOfWeek);
+
+                var invocation = new SchedulingAgentInvocation
+                {
+                    RequestId = req.Id,
+                    TechnicianId = tech.Id,
+                    Priority = effectivePriority,
+                    EstimatedDurationMinutes = durationMinutes,
+                    PreferredStartTime = scheduledStartUtc.Value,
+                    PreferredEndTime = scheduledEndUtc.Value,
+                    SlaDeadline = slaDeadlineUtc,
+                    Description = req.Description ?? string.Empty,
+                    IsTechnicianAvailable = tech.IsAvailable,
+                    ExistingBookings = JsonSerializer.SerializeToElement(existingBookingsArray),
+                    BusinessHours = bh != null ? JsonSerializer.SerializeToElement(new
+                    {
+                        weekday_open = bh.OpenTime.ToString(@"hh\:mm\:ss"),
+                        weekday_close = bh.CloseTime.ToString(@"hh\:mm\:ss"),
+                        is_working_day = bh.IsWorkingDay,
+                        working_days = new[] { "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" }
+                    }) : null,
+                    WithinBusinessHours = true,
+                    SlaCompliant = true
+                };
+
+                pythonResult = await _pythonAgentClient.ExecuteSchedulingAgentAsync(invocation);
+
+                if (pythonResult is { Success: true, OutputData: not null })
+                {
+                    var pyOut = pythonResult.OutputData.Value;
+                    if (pyOut.TryGetProperty("proposed_start_time", out var pyStartEl) || pyOut.TryGetProperty("proposed_start", out pyStartEl))
+                    {
+                        var pyStartStr = pyStartEl.GetString();
+                        if (pyStartStr != null && DateTime.TryParse(pyStartStr, null, System.Globalization.DateTimeStyles.RoundtripKind, out var pyStart))
+                        {
+                            var pyStartUtc = SchedulingService.NormalizeToUtc(pyStart);
+                            DateTime pyEndUtc;
+                            if (pyOut.TryGetProperty("proposed_end_time", out var pyEndEl) || pyOut.TryGetProperty("proposed_end", out pyEndEl))
+                            {
+                                var pyEndStr = pyEndEl.GetString();
+                                if (pyEndStr != null && DateTime.TryParse(pyEndStr, null, System.Globalization.DateTimeStyles.RoundtripKind, out var pyEnd))
+                                    pyEndUtc = SchedulingService.NormalizeToUtc(pyEnd);
+                                else
+                                    pyEndUtc = pyStartUtc.AddMinutes(durationMinutes);
+                            }
+                            else
+                            {
+                                pyEndUtc = pyStartUtc.AddMinutes(durationMinutes);
+                            }
+
+                            scheduledStartUtc = pyStartUtc;
+                            scheduledEndUtc = pyEndUtc;
+                            workOrder.ScheduledStartTime = pyStartUtc;
+                            workOrder.ScheduledEndTime = pyEndUtc;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogWarning(ex, "Python Scheduling Agent invocation failed; falling back to deterministic C# scheduling");
+                pythonResult = null;
+            }
+        }
+
         // If scheduled directly, validate times using the 5-scenario decision matrix
         if (scheduledStartUtc.HasValue && scheduledEndUtc.HasValue)
         {
@@ -297,6 +427,12 @@ public class WorkOrderService : IWorkOrderService
             var isTechnicianUnavailable = !originalValidation.IsWithinTechnicianAvailability;
             var isSlaBreached = !originalValidation.IsSlaCompliant;
             var isHighImpactPriority = priority == WorkOrderPriority.High || priority == WorkOrderPriority.Critical;
+
+            var pythonPrefix = pythonAgentCalled
+                ? (pythonResult is { Success: true }
+                    ? "Python Scheduling Agent was invoked and validated successfully. "
+                    : "Python Scheduling Agent was invoked but did not return a usable result; deterministic C# scheduling was used. ")
+                : "";
 
             if (isConflict)
             {
@@ -373,8 +509,8 @@ public class WorkOrderService : IWorkOrderService
                 workOrder.ConflictDetected = true;
                 workOrder.ConflictDetailsJson = JsonSerializer.Serialize(conflictDetails);
                 workOrder.AiDecisionSummary = conflictDetails.Any(c => c.Reason.Contains("No conflict-free slot"))
-                    ? $"Schedule conflict detected for technician {tech.User?.FirstName} {tech.User?.LastName}. No valid alternative slot found within {maxSearchDays} days. Manual manager scheduling required."
-                    : $"Schedule conflict detected for technician {tech.User?.FirstName} {tech.User?.LastName}. Original requested slot has overlapping booking. Alternative slot proposed for Manager review.";
+                    ? $"{pythonPrefix}Schedule conflict detected for technician {tech.User?.FirstName} {tech.User?.LastName}. No valid alternative slot found within {maxSearchDays} days. Manual manager scheduling required."
+                    : $"{pythonPrefix}Schedule conflict detected for technician {tech.User?.FirstName} {tech.User?.LastName}. Original requested slot has overlapping booking. Alternative slot proposed for Manager review.";
                 approvalReason = "Schedule conflict detected. Manager sign-off required for alternative slot or manual scheduling.";
             }
             else if (isOutsideBusinessHours)
@@ -441,28 +577,102 @@ public class WorkOrderService : IWorkOrderService
                 workOrder.ConflictDetected = false;
                 if (alternativeFound)
                 {
-                    workOrder.AiDecisionSummary = $"Requested time falls outside operational business hours for technician {tech.User?.FirstName} {tech.User?.LastName}. Next available operational slot proposed for Manager review.";
+                    workOrder.AiDecisionSummary = $"{pythonPrefix}Requested time falls outside operational business hours for technician {tech.User?.FirstName} {tech.User?.LastName}. Next available operational slot proposed for Manager review.";
                 }
                 else
                 {
-                    workOrder.AiDecisionSummary = $"Requested time falls outside operational business hours for technician {tech.User?.FirstName} {tech.User?.LastName}. No valid operational slot found within {maxSearchDays} days. Manual manager scheduling required.";
+                    workOrder.AiDecisionSummary = $"{pythonPrefix}Requested time falls outside operational business hours for technician {tech.User?.FirstName} {tech.User?.LastName}. No valid operational slot found within {maxSearchDays} days. Manual manager scheduling required.";
                 }
                 approvalReason = "Requested time is outside operational business hours. Manager approval required.";
             }
             else if (isTechnicianUnavailable)
             {
-                // Technician unavailable → PendingManagerApproval
-                workOrder.Status = WorkOrderStatus.PendingManagerApproval;
+                // Technician unavailable → search for alternative slot for the SAME technician
+                var tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Colombo");
+                var searchAnchorUtc = requestedStartUtc ?? DateTime.UtcNow;
+                var searchBaseLocal = TimeZoneInfo.ConvertTimeFromUtc(
+                    searchAnchorUtc.Kind != DateTimeKind.Utc ? searchAnchorUtc.ToUniversalTime() : searchAnchorUtc, tz);
+                var alternativeFound = false;
+                var maxSearchDays = 7;
+
+                for (int dayOffset = 0; dayOffset < maxSearchDays && !alternativeFound; dayOffset++)
+                {
+                    var checkDateLocal = searchBaseLocal.Date.AddDays(dayOffset);
+                    var dayOfWeek = (int)checkDateLocal.DayOfWeek;
+                    var bh = await _context.Set<BusinessHours>()
+                        .FirstOrDefaultAsync(b => b.DayOfWeek == dayOfWeek);
+
+                    if (bh == null || !bh.IsWorkingDay) continue;
+
+                    var dayOpenLocal = checkDateLocal.Add(bh.OpenTime);
+                    var dayCloseLocal = checkDateLocal.Add(bh.CloseTime);
+
+                    DateTime startSearchLocal;
+                    if (dayOffset == 0 && searchBaseLocal > dayOpenLocal)
+                    {
+                        var snappedMinutes = (searchBaseLocal.Minute / 30) * 30;
+                        startSearchLocal = new DateTime(checkDateLocal.Year, checkDateLocal.Month, checkDateLocal.Day,
+                            searchBaseLocal.Hour, snappedMinutes, 0, DateTimeKind.Unspecified);
+                        if (startSearchLocal < searchBaseLocal)
+                            startSearchLocal = startSearchLocal.AddMinutes(30);
+                    }
+                    else
+                    {
+                        startSearchLocal = dayOpenLocal;
+                    }
+
+                    while (startSearchLocal.AddMinutes(durationMinutes) <= dayCloseLocal)
+                    {
+                        var endSearchLocal = startSearchLocal.AddMinutes(durationMinutes);
+                        var startSearchUtc = TimeZoneInfo.ConvertTimeToUtc(
+                            DateTime.SpecifyKind(startSearchLocal, DateTimeKind.Unspecified), tz);
+                        var endSearchUtc = TimeZoneInfo.ConvertTimeToUtc(
+                            DateTime.SpecifyKind(endSearchLocal, DateTimeKind.Unspecified), tz);
+
+                        var slotVal = await _schedulingService.ValidateScheduleAsync(
+                            tech.Id, startSearchUtc, endSearchUtc, durationMinutes,
+                            dto.Priority, slaDeadlineUtc);
+
+                        if (slotVal.IsValid)
+                        {
+                            workOrder.ScheduledStartTime = startSearchUtc;
+                            workOrder.ScheduledEndTime = endSearchUtc;
+                            alternativeFound = true;
+                            break;
+                        }
+
+                        startSearchLocal = startSearchLocal.AddMinutes(30);
+                    }
+                }
+
                 workOrder.ConflictDetected = false;
-                workOrder.AiDecisionSummary = $"Assigned technician {tech.User?.FirstName} {tech.User?.LastName} is currently unavailable. Manager review required.";
-                approvalReason = "Technician is marked as unavailable. Manager review required.";
+                if (alternativeFound)
+                {
+                    if (isHighImpactPriority)
+                    {
+                        workOrder.Status = WorkOrderStatus.PendingManagerApproval;
+                        workOrder.AiDecisionSummary = $"{pythonPrefix}Assigned technician {tech.User?.FirstName} {tech.User?.LastName} was unavailable at the requested time. Alternative slot proposed. {priority} priority requires Manager sign-off.";
+                        approvalReason = "Technician unavailable at requested time. Alternative slot proposed. High priority requires Manager approval.";
+                    }
+                    else
+                    {
+                        workOrder.Status = WorkOrderStatus.Scheduled;
+                        workOrder.AiDecisionSummary = $"Assigned technician {tech.User?.FirstName} {tech.User?.LastName} was unavailable at the requested time. An alternative conflict-free slot was found and auto-scheduled.";
+                    }
+                }
+                else
+                {
+                    workOrder.Status = WorkOrderStatus.PendingManagerApproval;
+                    workOrder.AiDecisionSummary = $"{pythonPrefix}Assigned technician {tech.User?.FirstName} {tech.User?.LastName} is unavailable and no valid slot was found within {maxSearchDays} days. Manual manager review required.";
+                    approvalReason = "No valid slot exists for the assigned technician. Manual manager scheduling required.";
+                }
             }
             else if (isSlaBreached)
             {
                 // SLA breach → PendingManagerApproval
                 workOrder.Status = WorkOrderStatus.PendingManagerApproval;
                 workOrder.ConflictDetected = false;
-                workOrder.AiDecisionSummary = $"Proposed schedule breaches SLA deadline for technician {tech.User?.FirstName} {tech.User?.LastName}. Manager approval required.";
+                workOrder.AiDecisionSummary = $"{pythonPrefix}Proposed schedule breaches SLA deadline for technician {tech.User?.FirstName} {tech.User?.LastName}. Manager approval required.";
                 approvalReason = "Proposed schedule breaches SLA deadline. Manager approval required.";
             }
             else if (isHighImpactPriority)
@@ -470,7 +680,7 @@ public class WorkOrderService : IWorkOrderService
                 // Scenario 4: High/Critical priority → PendingManagerApproval
                 workOrder.Status = WorkOrderStatus.PendingManagerApproval;
                 workOrder.ConflictDetected = false;
-                workOrder.AiDecisionSummary = $"{priority} priority work order for technician {tech.User?.FirstName} {tech.User?.LastName}. Manager sign-off required before scheduling.";
+                workOrder.AiDecisionSummary = $"{pythonPrefix}{priority} priority work order for technician {tech.User?.FirstName} {tech.User?.LastName}. Manager sign-off required before scheduling.";
                 approvalReason = $"{priority} priority work order requires Manager sign-off.";
             }
             else
@@ -478,7 +688,7 @@ public class WorkOrderService : IWorkOrderService
                 // Scenarios 1 & 5: No conflict + valid hours + non-high-impact → Scheduled immediately
                 workOrder.Status = WorkOrderStatus.Scheduled;
                 workOrder.ConflictDetected = false;
-                workOrder.AiDecisionSummary = $"Schedule validated successfully. No conflicts detected, within business hours. Auto-scheduled for technician {tech.User?.FirstName} {tech.User?.LastName}.";
+                workOrder.AiDecisionSummary = $"Schedule validated successfully. No conflicts detected and the schedule is within business hours. Auto-scheduled for technician {tech.User?.FirstName} {tech.User?.LastName}.";
             }
         }
         else
@@ -546,7 +756,12 @@ public class WorkOrderService : IWorkOrderService
                     proposedStart = workOrder.ScheduledStartTime.Value,
                     proposedEnd = workOrder.ScheduledEndTime!.Value,
                     conflictDetected,
-                    decisionSummary = workOrder.AiDecisionSummary
+                    decisionSummary = workOrder.AiDecisionSummary,
+                    pythonAgentCalled,
+                    pythonAgentSuccess = pythonResult?.Success ?? false,
+                    executionMode = pythonResult?.ExecutionMode ?? "not_invoked",
+                    llmUsed = pythonResult?.LlmUsed,
+                    schedulingPath = pythonResult?.SchedulingPath
                 })
             };
 
@@ -563,8 +778,8 @@ public class WorkOrderService : IWorkOrderService
                     priority = dto.Priority,
                     duration = durationMinutes,
                     sla = slaDeadlineUtc,
-                    originalRequestedStart = scheduledStartUtc!.Value,
-                    originalRequestedEnd = scheduledEndUtc!.Value
+                    originalRequestedStart = requestedStartUtc!.Value,
+                    originalRequestedEnd = requestedEndUtc!.Value
                 }),
                 OutputDataJson = JsonSerializer.Serialize(new
                 {
@@ -577,94 +792,113 @@ public class WorkOrderService : IWorkOrderService
                 ValidationResultJson = JsonSerializer.Serialize(checklist)
             };
 
-            var activeStatusesForCount = new[]
+            if (pythonAgentCalled && pythonResult != null && pythonResult.ToolCalls.Count > 0)
             {
-                WorkOrderStatus.Proposed,
-                WorkOrderStatus.PendingManagerApproval,
-                WorkOrderStatus.Approved,
-                WorkOrderStatus.Scheduled,
-                WorkOrderStatus.InProgress,
-                WorkOrderStatus.Paused
-            };
-
-            var sw = Stopwatch.StartNew();
-            var activeBookingsCount = await _context.Set<WorkOrder>()
-                .CountAsync(w => !w.IsDeleted &&
-                                 w.TechnicianId == tech.Id &&
-                                 activeStatusesForCount.Contains(w.Status));
-            sw.Stop();
-            var techCalendarTimeMs = (int)sw.ElapsedMilliseconds;
-
-            sw.Restart();
-            var scheduledStartLocal = SchedulingService.ConvertToLocal(workOrder.ScheduledStartTime.Value);
-            var proposedDayOfWeek = (int)scheduledStartLocal.DayOfWeek;
-            var actualBusinessHours = await _context.Set<BusinessHours>()
-                .FirstOrDefaultAsync(b => b.DayOfWeek == proposedDayOfWeek);
-            sw.Stop();
-            var businessHoursTimeMs = (int)sw.ElapsedMilliseconds;
-
-            sw.Restart();
-            var conflictingCount = await _context.Set<WorkOrder>()
-                .Where(w => !w.IsDeleted &&
-                            w.TechnicianId == tech.Id &&
-                            activeStatusesForCount.Contains(w.Status) &&
-                            w.ScheduledStartTime.HasValue &&
-                            w.ScheduledEndTime.HasValue &&
-                            w.ScheduledStartTime.Value < workOrder.ScheduledEndTime!.Value &&
-                            w.ScheduledEndTime.Value > workOrder.ScheduledStartTime.Value)
-                .CountAsync();
-            sw.Stop();
-            var existingWorkOrdersTimeMs = (int)sw.ElapsedMilliseconds;
-
-            sw.Restart();
-            var validationData = finalValidation;
-            sw.Stop();
-            var validationTimeMs = (int)sw.ElapsedMilliseconds;
-
-            schedulingStep.ToolCalls.Add(new AgentToolCall
-            {
-                StepId = schedulingStep.Id,
-                ToolName = "GetTechnicianCalendar",
-                InputJson = JsonSerializer.Serialize(new { technicianId = tech.Id }),
-                OutputJson = JsonSerializer.Serialize(new { isAvailable = tech.IsAvailable, activeBookingsCount }),
-                ExecutionTimeMs = techCalendarTimeMs,
-                Success = true
-            });
-
-            schedulingStep.ToolCalls.Add(new AgentToolCall
-            {
-                StepId = schedulingStep.Id,
-                ToolName = "GetBusinessHours",
-                InputJson = JsonSerializer.Serialize(new { date = scheduledStartLocal.ToString("yyyy-MM-dd"), dayOfWeek = proposedDayOfWeek }),
-                OutputJson = JsonSerializer.Serialize(new
+                foreach (var tc in pythonResult.ToolCalls)
                 {
-                    open = actualBusinessHours?.OpenTime.ToString(@"hh\:mm") ?? "N/A",
-                    close = actualBusinessHours?.CloseTime.ToString(@"hh\:mm") ?? "N/A",
-                    isWorkingDay = actualBusinessHours?.IsWorkingDay ?? false
-                }),
-                ExecutionTimeMs = businessHoursTimeMs,
-                Success = actualBusinessHours != null
-            });
-
-            schedulingStep.ToolCalls.Add(new AgentToolCall
+                    schedulingStep.ToolCalls.Add(new AgentToolCall
+                    {
+                        StepId = schedulingStep.Id,
+                        ToolName = tc.ToolName,
+                        InputJson = tc.InputParams?.GetRawText() ?? "{}",
+                        OutputJson = tc.OutputParams?.GetRawText() ?? "{}",
+                        ExecutionTimeMs = tc.ExecutionTimeMs,
+                        Success = tc.Success,
+                        ErrorMessage = tc.ErrorMessage
+                    });
+                }
+            }
+            else
             {
-                StepId = schedulingStep.Id,
-                ToolName = "GetExistingWorkOrders",
-                InputJson = JsonSerializer.Serialize(new { technicianId = tech.Id, checkDate = scheduledStartLocal.ToString("yyyy-MM-dd") }),
-                OutputJson = JsonSerializer.Serialize(new { conflictCount = conflictingCount, activeBookingsCount }),
-                ExecutionTimeMs = existingWorkOrdersTimeMs,
-                Success = true
-            });
+                var activeStatusesForCount = new[]
+                {
+                    WorkOrderStatus.Proposed,
+                    WorkOrderStatus.PendingManagerApproval,
+                    WorkOrderStatus.Approved,
+                    WorkOrderStatus.Scheduled,
+                    WorkOrderStatus.InProgress,
+                    WorkOrderStatus.Paused
+                };
 
-            schedulingStep.ToolCalls.Add(new AgentToolCall
-            {
-                StepId = schedulingStep.Id,
-                ToolName = "ValidateSchedule",
-                InputJson = JsonSerializer.Serialize(new { technicianId = tech.Id, start = workOrder.ScheduledStartTime.Value, end = workOrder.ScheduledEndTime.Value }),
-                OutputJson = JsonSerializer.Serialize(validationData),
-                ExecutionTimeMs = validationTimeMs,
-                Success = finalValidation.IsValid
-            });
+                var sw = Stopwatch.StartNew();
+                var activeBookingsCount = await _context.Set<WorkOrder>()
+                    .CountAsync(w => !w.IsDeleted &&
+                                     w.TechnicianId == tech.Id &&
+                                     activeStatusesForCount.Contains(w.Status));
+                sw.Stop();
+                var techCalendarTimeMs = (int)sw.ElapsedMilliseconds;
+
+                sw.Restart();
+                var scheduledStartLocal = SchedulingService.ConvertToLocal(workOrder.ScheduledStartTime.Value);
+                var proposedDayOfWeek = (int)scheduledStartLocal.DayOfWeek;
+                var actualBusinessHours = await _context.Set<BusinessHours>()
+                    .FirstOrDefaultAsync(b => b.DayOfWeek == proposedDayOfWeek);
+                sw.Stop();
+                var businessHoursTimeMs = (int)sw.ElapsedMilliseconds;
+
+                sw.Restart();
+                var conflictingCount = await _context.Set<WorkOrder>()
+                    .Where(w => !w.IsDeleted &&
+                                w.TechnicianId == tech.Id &&
+                                activeStatusesForCount.Contains(w.Status) &&
+                                w.ScheduledStartTime.HasValue &&
+                                w.ScheduledEndTime.HasValue &&
+                                w.ScheduledStartTime.Value < workOrder.ScheduledEndTime!.Value &&
+                                w.ScheduledEndTime.Value > workOrder.ScheduledStartTime.Value)
+                    .CountAsync();
+                sw.Stop();
+                var existingWorkOrdersTimeMs = (int)sw.ElapsedMilliseconds;
+
+                sw.Restart();
+                var validationData = finalValidation;
+                sw.Stop();
+                var validationTimeMs = (int)sw.ElapsedMilliseconds;
+
+                schedulingStep.ToolCalls.Add(new AgentToolCall
+                {
+                    StepId = schedulingStep.Id,
+                    ToolName = "GetTechnicianCalendar",
+                    InputJson = JsonSerializer.Serialize(new { technicianId = tech.Id }),
+                    OutputJson = JsonSerializer.Serialize(new { isAvailable = tech.IsAvailable, activeBookingsCount }),
+                    ExecutionTimeMs = techCalendarTimeMs,
+                    Success = true
+                });
+
+                schedulingStep.ToolCalls.Add(new AgentToolCall
+                {
+                    StepId = schedulingStep.Id,
+                    ToolName = "GetBusinessHours",
+                    InputJson = JsonSerializer.Serialize(new { date = scheduledStartLocal.ToString("yyyy-MM-dd"), dayOfWeek = proposedDayOfWeek }),
+                    OutputJson = JsonSerializer.Serialize(new
+                    {
+                        open = actualBusinessHours?.OpenTime.ToString(@"hh\:mm") ?? "N/A",
+                        close = actualBusinessHours?.CloseTime.ToString(@"hh\:mm") ?? "N/A",
+                        isWorkingDay = actualBusinessHours?.IsWorkingDay ?? false
+                    }),
+                    ExecutionTimeMs = businessHoursTimeMs,
+                    Success = actualBusinessHours != null
+                });
+
+                schedulingStep.ToolCalls.Add(new AgentToolCall
+                {
+                    StepId = schedulingStep.Id,
+                    ToolName = "GetExistingWorkOrders",
+                    InputJson = JsonSerializer.Serialize(new { technicianId = tech.Id, checkDate = scheduledStartLocal.ToString("yyyy-MM-dd") }),
+                    OutputJson = JsonSerializer.Serialize(new { conflictCount = conflictingCount, activeBookingsCount }),
+                    ExecutionTimeMs = existingWorkOrdersTimeMs,
+                    Success = true
+                });
+
+                schedulingStep.ToolCalls.Add(new AgentToolCall
+                {
+                    StepId = schedulingStep.Id,
+                    ToolName = "ValidateSchedule",
+                    InputJson = JsonSerializer.Serialize(new { technicianId = tech.Id, start = workOrder.ScheduledStartTime.Value, end = workOrder.ScheduledEndTime.Value }),
+                    OutputJson = JsonSerializer.Serialize(validationData),
+                    ExecutionTimeMs = validationTimeMs,
+                    Success = finalValidation.IsValid
+                });
+            }
 
             agentWorkflow.Steps.Add(schedulingStep);
 
@@ -712,44 +946,137 @@ public class WorkOrderService : IWorkOrderService
 
     public async Task<WorkOrderDto> UpdateWorkOrderAsync(Guid id, WorkOrderUpdateDto dto, Guid updaterUserId)
     {
-        var workOrder = await _context.Set<WorkOrder>().FirstOrDefaultAsync(w => w.Id == id && !w.IsDeleted);
+        var workOrder = await _context.Set<WorkOrder>()
+            .Include(w => w.Request)
+            .Include(w => w.Technician)
+                .ThenInclude(t => t!.User)
+            .FirstOrDefaultAsync(w => w.Id == id && !w.IsDeleted);
+
         if (workOrder == null) throw new NotFoundException($"Work order '{id}' not found.");
 
         if (workOrder.Status == WorkOrderStatus.Completed || workOrder.Status == WorkOrderStatus.Cancelled)
-            throw new InvalidOperationException($"Cannot modify a work order that is already in '{workOrder.Status}' state.");
+            throw new ValidationException($"Cannot modify a work order that is already in '{workOrder.Status}' state.");
 
+        // Track if scheduling-related fields are changing
+        var scheduleChanged = false;
+        var technicianChanged = false;
+        var originalTechnicianId = workOrder.TechnicianId;
+        var originalStart = workOrder.ScheduledStartTime;
+        var originalEnd = workOrder.ScheduledEndTime;
+
+        // Update basic fields
         workOrder.Title = dto.Title;
         workOrder.Description = dto.Description;
         workOrder.EstimatedDurationMinutes = dto.EstimatedDurationMinutes;
 
         if (dto.LocationId.HasValue) workOrder.LocationId = dto.LocationId;
-        if (dto.TechnicianId.HasValue) workOrder.TechnicianId = dto.TechnicianId.Value;
+
+        // Check if technician is changing
+        if (dto.TechnicianId.HasValue && dto.TechnicianId.Value != workOrder.TechnicianId)
+        {
+            workOrder.TechnicianId = dto.TechnicianId.Value;
+            technicianChanged = true;
+        }
 
         if (Enum.TryParse<WorkOrderPriority>(dto.Priority, true, out var p))
             workOrder.Priority = p;
 
-        if (dto.ScheduledStartTime.HasValue)
+        // Check if schedule is changing
+        if (dto.ScheduledStartTime.HasValue || dto.ScheduledEndTime.HasValue)
         {
-            workOrder.ScheduledStartTime = SchedulingService.NormalizeToUtc(dto.ScheduledStartTime.Value);
-            workOrder.ScheduledEndTime = dto.ScheduledEndTime.HasValue
-                ? SchedulingService.NormalizeToUtc(dto.ScheduledEndTime.Value)
-                : workOrder.ScheduledStartTime.Value.AddMinutes(dto.EstimatedDurationMinutes);
+            var newStart = dto.ScheduledStartTime.HasValue ? SchedulingService.NormalizeToUtc(dto.ScheduledStartTime.Value) : (DateTime?)null;
+            var newEnd = dto.ScheduledEndTime.HasValue ? SchedulingService.NormalizeToUtc(dto.ScheduledEndTime.Value) : (DateTime?)null;
 
-            // Re-validate schedule
-            var valResult = await _schedulingService.ValidateScheduleAsync(
-                workOrder.TechnicianId,
-                workOrder.ScheduledStartTime.Value,
-                workOrder.ScheduledEndTime.Value,
-                workOrder.EstimatedDurationMinutes,
-                dto.Priority,
-                workOrder.SLADeadline,
-                workOrder.Id);
-
-            workOrder.ConflictDetected = !valResult.IsConflictFree;
-            workOrder.ConflictDetailsJson = JsonSerializer.Serialize(valResult.Conflicts);
+            if (newStart != originalStart || newEnd != originalEnd)
+            {
+                scheduleChanged = true;
+                workOrder.ScheduledStartTime = newStart;
+                workOrder.ScheduledEndTime = newEnd ?? newStart?.AddMinutes(dto.EstimatedDurationMinutes);
+            }
         }
 
-        workOrder.UpdatedAt = DateTime.UtcNow;
+        // Re-validate if scheduling-related changes were made
+        if ((scheduleChanged || technicianChanged) && workOrder.ScheduledStartTime.HasValue && workOrder.ScheduledEndTime.HasValue)
+        {
+            // Use transaction to ensure consistency
+            using var transaction = await _context.Database.BeginTransactionAsync();
+
+            try
+            {
+                // Fetch the technician if changed
+                Technician? tech = null;
+                if (technicianChanged)
+                {
+                    tech = await _context.Technicians
+                        .Include(t => t.User)
+                        .Include(t => t.Skills)
+                        .FirstOrDefaultAsync(t => t.Id == workOrder.TechnicianId && !t.IsDeleted);
+
+                    if (tech == null || tech.User == null || !tech.User.IsActive)
+                        throw new ValidationException("Selected technician does not exist or is inactive.");
+                }
+
+                // Re-validate the schedule
+                var valResult = await _schedulingService.ValidateScheduleAsync(
+                    workOrder.TechnicianId,
+                    workOrder.ScheduledStartTime.Value,
+                    workOrder.ScheduledEndTime.Value,
+                    workOrder.EstimatedDurationMinutes,
+                    dto.Priority,
+                    workOrder.SLADeadline,
+                    workOrder.Id);
+
+                if (!valResult.IsValid)
+                {
+                    // Rollback changes if validation fails
+                    workOrder.TechnicianId = originalTechnicianId;
+                    workOrder.ScheduledStartTime = originalStart;
+                    workOrder.ScheduledEndTime = originalEnd;
+                    throw new ValidationException($"Schedule validation failed: {string.Join("; ", valResult.ValidationErrors)}");
+                }
+
+                workOrder.ConflictDetected = !valResult.IsConflictFree;
+                workOrder.ConflictDetailsJson = JsonSerializer.Serialize(valResult.Conflicts);
+
+                // Check if this change requires manager approval
+                var isHighImpactPriority = workOrder.Priority == WorkOrderPriority.High || workOrder.Priority == WorkOrderPriority.Critical;
+                var requiresReapproval = scheduleChanged || technicianChanged || isHighImpactPriority;
+
+                if (requiresReapproval && workOrder.Status == WorkOrderStatus.Scheduled)
+                {
+                    // Move back to PendingManagerApproval if significant changes were made
+                    workOrder.Status = WorkOrderStatus.PendingManagerApproval;
+
+                    var changeSummary = new List<string>();
+                    if (scheduleChanged) changeSummary.Add("schedule");
+                    if (technicianChanged) changeSummary.Add("technician");
+
+                    var history = new WorkOrderStatusHistory
+                    {
+                        WorkOrderId = workOrder.Id,
+                        PreviousStatus = WorkOrderStatus.Scheduled,
+                        NewStatus = WorkOrderStatus.PendingManagerApproval,
+                        ChangedById = updaterUserId,
+                        Reason = $"Work order updated ({string.Join(", ", changeSummary)} changed). Re-routed to Manager for approval due to scheduling changes."
+                    };
+                    await _context.Set<WorkOrderStatusHistory>().AddAsync(history);
+                }
+
+                workOrder.UpdatedAt = DateTime.UtcNow;
+                await transaction.CommitAsync();
+            }
+            catch
+            {
+                await transaction.RollbackAsync();
+                throw;
+            }
+        }
+        else
+        {
+            // No schedule changes, just update basic fields
+            workOrder.UpdatedAt = DateTime.UtcNow;
+        }
+
         await _context.SaveChangesAsync();
 
         await _auditLogService.LogAsync(
@@ -757,7 +1084,7 @@ public class WorkOrderService : IWorkOrderService
             "WorkOrderUpdated",
             "WorkOrder",
             workOrder.Id.ToString(),
-            JsonSerializer.Serialize(new { workOrder.WorkOrderNumber, dto.Title, workOrder.ScheduledStartTime }),
+            JsonSerializer.Serialize(new { workOrder.WorkOrderNumber, dto.Title, scheduleChanged, technicianChanged }),
             "127.0.0.1");
 
         return await GetWorkOrderByIdAsync(workOrder.Id);
@@ -1546,6 +1873,34 @@ public class WorkOrderService : IWorkOrderService
                 Skills = t.Skills.Select(s => s.Name).ToList()
             })
             .ToListAsync();
+    }
+
+    public async Task<RequestAssignmentDto?> GetAssignmentForRequestAsync(Guid requestId)
+    {
+        var assignment = await _context.Set<Assignment>()
+            .Include(a => a.Technician)
+                .ThenInclude(t => t.User)
+            .Where(a => a.MaintenanceRequestId == requestId &&
+                        (a.Status == "Assigned" || a.Status == "Recommended"))
+            .OrderByDescending(a => a.AssignedAt)
+            .FirstOrDefaultAsync();
+
+        if (assignment == null)
+            return null;
+
+        return new RequestAssignmentDto
+        {
+            AssignmentId = assignment.Id,
+            TechnicianId = assignment.TechnicianId,
+            TechnicianName = assignment.Technician?.User != null
+                ? $"{assignment.Technician.User.FirstName} {assignment.Technician.User.LastName}"
+                : "Unknown",
+            TechnicianSpecialization = assignment.Technician?.Specialization ?? string.Empty,
+            AssignmentStatus = assignment.Status,
+            MatchScore = assignment.MatchScore,
+            ReasoningSummary = assignment.ReasoningSummary,
+            AssignedAt = assignment.AssignedAt
+        };
     }
 
     public async Task EnsureEvidenceUploadAllowedAsync(Guid workOrderId, Guid userId, string role)

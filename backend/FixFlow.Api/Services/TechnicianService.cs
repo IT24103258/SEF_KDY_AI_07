@@ -321,8 +321,6 @@ public class TechnicianService : ITechnicianService
             });
         }
 
-        tech.IsAvailable = false;
-
         return await _context.SaveChangesAsync() > 0;
     }
 }

@@ -121,5 +121,9 @@ export const workOrderApi = {
 
   getTechnicians: async () => {
     return await api.get('/work-orders/technicians');
+  },
+
+  getAssignmentForRequest: async (requestId) => {
+    return await api.get(`/work-orders/requests/${requestId}/assignment`);
   }
 };

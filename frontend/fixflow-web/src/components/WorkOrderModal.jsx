@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Card, Button, Input } from './SharedUI';
 import { workOrderApi } from '../services/workOrderApi';
-import { X, Calendar, Clock, AlertTriangle, CheckCircle2, FileText, MapPin, User, Tag } from 'lucide-react';
+import { X, Calendar, Clock, AlertTriangle, CheckCircle2, FileText, MapPin, User, Tag, Shield } from 'lucide-react';
 
 const JOB_TITLES = [
   'Electrical Repair',
@@ -45,23 +45,80 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [assignedTechnician, setAssignedTechnician] = useState(null);
+  const [loadingAssignment, setLoadingAssignment] = useState(false);
+  const [infoMessage, setInfoMessage] = useState(null);
 
   useEffect(() => {
-    if (isOpen) {
-      loadDropdowns();
-      if (workOrder) {
-        setRequestId(workOrder.requestId || '');
-        setTitle(workOrder.title || '');
-        setDescription(workOrder.description || '');
-        setPriority(workOrder.priority || 'Medium');
-        setTechnicianId(workOrder.technicianId || '');
-        setLocationId(workOrder.locationId || '');
-        setScheduledStartTime(workOrder.scheduledStartTime ? toDatetimeLocalValue(workOrder.scheduledStartTime) : '');
-        setScheduledEndTime(workOrder.scheduledEndTime ? toDatetimeLocalValue(workOrder.scheduledEndTime) : '');
-        setEstimatedDurationMinutes(workOrder.estimatedDurationMinutes || 60);
-      } else {
-        resetForm();
-      }
+    if (!isOpen) return;
+
+    loadDropdowns();
+    setAssignedTechnician(null);
+    setLoadingAssignment(false);
+    setInfoMessage(null);
+
+    if (workOrder) {
+      (async () => {
+        try {
+          const fullRes = await workOrderApi.getWorkOrderById(workOrder.id);
+          const full = fullRes?.success && fullRes.data ? fullRes.data : null;
+          const src = full || workOrder;
+
+          setRequestId(src.requestId || '');
+          setTitle(src.title || '');
+          setDescription(src.description || '');
+          setPriority(src.priority || 'Medium');
+          setTechnicianId(src.technicianId || '');
+          setLocationId(src.locationId || '');
+          setScheduledStartTime(src.scheduledStartTime ? toDatetimeLocalValue(src.scheduledStartTime) : '');
+          setScheduledEndTime(src.scheduledEndTime ? toDatetimeLocalValue(src.scheduledEndTime) : '');
+          setEstimatedDurationMinutes(src.estimatedDurationMinutes || 60);
+
+          if (src.technicianId) {
+            setAssignedTechnician({
+              technicianId: src.technicianId,
+              technicianName: src.technicianName || 'Assigned Technician',
+              technicianSpecialization: src.technicianSpecialization || '',
+              assignmentStatus: 'Assigned'
+            });
+          }
+
+          if (src.requestId && src.requestNumber) {
+            setSelectedRequestObj({
+              id: src.requestId,
+              requestNumber: src.requestNumber,
+              title: src.requestTitle || src.title || '',
+              description: src.description || '',
+              locationId: src.locationId,
+              locationName: src.locationName || '',
+              building: src.building || '',
+              priority: src.priority || 'Medium',
+              status: src.status || ''
+            });
+          }
+        } catch (err) {
+          console.error('Failed to load work order details for edit', err);
+          setRequestId(workOrder.requestId || '');
+          setTitle(workOrder.title || '');
+          setDescription(workOrder.description || '');
+          setPriority(workOrder.priority || 'Medium');
+          setTechnicianId(workOrder.technicianId || '');
+          setLocationId(workOrder.locationId || '');
+          setScheduledStartTime(workOrder.scheduledStartTime ? toDatetimeLocalValue(workOrder.scheduledStartTime) : '');
+          setScheduledEndTime(workOrder.scheduledEndTime ? toDatetimeLocalValue(workOrder.scheduledEndTime) : '');
+          setEstimatedDurationMinutes(workOrder.estimatedDurationMinutes || 60);
+          if (workOrder.technicianId) {
+            setAssignedTechnician({
+              technicianId: workOrder.technicianId,
+              technicianName: workOrder.technicianName || 'Assigned Technician',
+              technicianSpecialization: workOrder.technicianSpecialization || '',
+              assignmentStatus: 'Assigned'
+            });
+          }
+        }
+      })();
+    } else {
+      resetForm();
     }
   }, [isOpen, workOrder]);
 
@@ -77,6 +134,9 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
     setEstimatedDurationMinutes(60);
     setSelectedRequestObj(null);
     setError(null);
+    setAssignedTechnician(null);
+    setLoadingAssignment(false);
+    setInfoMessage(null);
   };
 
   const loadDropdowns = async () => {
@@ -107,12 +167,14 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
     }
   };
 
-  const handleRequestChange = (e) => {
+  const handleRequestChange = async (e) => {
     const selectedId = e.target.value;
     setRequestId(selectedId);
 
     const found = requests.find(r => r.id === selectedId);
     setSelectedRequestObj(found || null);
+    setAssignedTechnician(null);
+    setInfoMessage(null);
 
     if (found) {
       if (found.locationId) {
@@ -125,7 +187,6 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
         setDescription(found.description);
       }
 
-      // Auto-suggest matching Job Title based on category or request title
       if (!title) {
         const catName = (found.categoryName || found.title || '').toLowerCase();
         const matched = JOB_TITLES.find(jt => catName.includes(jt.toLowerCase().split(' ')[0]));
@@ -135,14 +196,34 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
           setTitle(JOB_TITLES[0]);
         }
       }
+
+      if (selectedId) {
+        setLoadingAssignment(true);
+        try {
+          const res = await workOrderApi.getAssignmentForRequest(selectedId);
+          if (res?.success && res.data) {
+            setAssignedTechnician(res.data);
+            setTechnicianId(res.data.technicianId);
+          } else {
+            setAssignedTechnician(null);
+            setTechnicianId('');
+          }
+        } catch (err) {
+          console.error('Failed to load assignment', err);
+          setAssignedTechnician(null);
+          setTechnicianId('');
+        } finally {
+          setLoadingAssignment(false);
+        }
+      }
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
+    setInfoMessage(null);
 
-    // Client-side validations
     if (!isEditing && (!requestId || requestId.trim() === '')) {
       setError('Please select an existing Maintenance Request.');
       return;
@@ -153,8 +234,13 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
       return;
     }
 
-    if (!technicianId || technicianId.trim() === '') {
-      setError('Please explicitly select an assigned Technician.');
+    if (!isEditing && !assignedTechnician) {
+      setError('No technician has been assigned to this request. Complete technician assignment before creating the work order.');
+      return;
+    }
+
+    if (!isEditing && (!technicianId || technicianId.trim() === '')) {
+      setError('No technician has been assigned to this request. Complete technician assignment before creating the work order.');
       return;
     }
 
@@ -182,10 +268,15 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
         estimatedDurationMinutes: Math.max(1, parseInt(estimatedDurationMinutes, 10) || 60)
       };
 
+      let result;
       if (isEditing) {
-        await workOrderApi.updateWorkOrder(workOrder.id, payload);
+        result = await workOrderApi.updateWorkOrder(workOrder.id, payload);
       } else {
-        await workOrderApi.createWorkOrder(payload);
+        result = await workOrderApi.createWorkOrder(payload);
+      }
+
+      if (result?.data?.aiDecisionSummary && result?.data?.status === 'PendingManagerApproval') {
+        setInfoMessage(result.data.aiDecisionSummary);
       }
 
       if (onSaved) {
@@ -261,6 +352,25 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
           </div>
         )}
 
+        {infoMessage && (
+          <div
+            style={{
+              padding: '0.75rem 1rem',
+              backgroundColor: 'rgba(59, 130, 246, 0.12)',
+              color: 'var(--primary-color)',
+              borderRadius: '8px',
+              marginBottom: '1rem',
+              fontSize: '0.85rem',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '8px'
+            }}
+          >
+            <Calendar size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
+            <span>{infoMessage}</span>
+          </div>
+        )}
+
         <form onSubmit={handleSubmit}>
           {/* Request Selection */}
           <div className="ff-field" style={{ marginBottom: '1rem' }}>
@@ -273,6 +383,7 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
               onChange={handleRequestChange}
               required
               disabled={isEditing}
+              style={isEditing ? { opacity: 0.7, cursor: 'not-allowed' } : {}}
             >
               <option value="">-- Select Existing Maintenance Request --</option>
               {requests.map((r) => (
@@ -370,6 +481,8 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
                 className="ff-input"
                 value={priority}
                 onChange={(e) => setPriority(e.target.value)}
+                disabled={isEditing}
+                style={isEditing ? { opacity: 0.7, cursor: 'not-allowed' } : {}}
               >
                 <option value="Low">Low</option>
                 <option value="Medium">Medium</option>
@@ -400,6 +513,8 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
                 className="ff-input"
                 value={locationId}
                 onChange={(e) => setLocationId(e.target.value)}
+                disabled={isEditing}
+                style={isEditing ? { opacity: 0.7, cursor: 'not-allowed' } : {}}
               >
                 <option value="">Select Location</option>
                 {locations.map((loc) => (
@@ -414,19 +529,74 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
               <label className="ff-label" style={{ fontWeight: 600 }}>
                 Assigned Technician <span style={{ color: 'var(--danger-color)' }}>*</span>
               </label>
-              <select
-                className="ff-input"
-                value={technicianId}
-                onChange={(e) => setTechnicianId(e.target.value)}
-                required
-              >
-                <option value="">-- Select Technician --</option>
-                {technicians.map((t) => (
-                  <option key={t.id || t.userId} value={t.id || t.userId}>
-                    {t.name || `${t.firstName || ''} ${t.lastName || ''}`.trim() || 'Technician'} {t.specialization ? `(${t.specialization})` : ''} {t.employeeId ? `[${t.employeeId}]` : ''}
-                  </option>
-                ))}
-              </select>
+              {loadingAssignment ? (
+                <div style={{
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--card-bg-hover)',
+                  fontSize: '0.85rem',
+                  color: 'var(--text-secondary)'
+                }}>
+                  Loading assignment...
+                </div>
+              ) : assignedTechnician ? (
+                <div style={{
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(59, 130, 246, 0.3)',
+                  backgroundColor: 'rgba(59, 130, 246, 0.08)',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 600, fontSize: '0.9rem' }}>
+                    <User size={16} style={{ color: 'var(--primary-color)' }} />
+                    {assignedTechnician.technicianName}
+                  </div>
+                  {assignedTechnician.technicianSpecialization && (
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '4px' }}>
+                      {assignedTechnician.technicianSpecialization}
+                    </div>
+                  )}
+                  <div style={{
+                    fontSize: '0.75rem',
+                    color: 'var(--primary-color)',
+                    marginTop: '6px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}>
+                    <Shield size={12} />
+                    Assigned by Assignment Agent
+                  </div>
+                </div>
+              ) : requestId ? (
+                <div style={{
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  border: '1px solid rgba(255, 107, 113, 0.3)',
+                  backgroundColor: 'rgba(255, 107, 113, 0.08)',
+                  fontSize: '0.85rem',
+                  color: 'var(--danger-color)'
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <AlertTriangle size={14} />
+                    No technician assigned to this request.
+                  </div>
+                  <div style={{ fontSize: '0.8rem', marginTop: '4px', color: 'var(--text-secondary)' }}>
+                    Complete technician assignment before creating the work order.
+                  </div>
+                </div>
+              ) : (
+                <div style={{
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'var(--card-bg-hover)',
+                  fontSize: '0.85rem',
+                  color: 'var(--text-secondary)'
+                }}>
+                  Select a request to load the assigned technician.
+                </div>
+              )}
             </div>
           </div>
 
@@ -452,7 +622,11 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
             <Button variant="secondary" type="button" onClick={onClose} disabled={loading}>
               Cancel
             </Button>
-            <Button variant="primary" type="submit" disabled={loading}>
+            <Button
+              variant="primary"
+              type="submit"
+              disabled={loading || (!isEditing && !assignedTechnician && !!requestId)}
+            >
               {loading ? 'Saving...' : isEditing ? 'Update Work Order' : 'Create Work Order'}
             </Button>
           </div>

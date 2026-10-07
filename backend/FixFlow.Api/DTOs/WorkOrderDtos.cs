@@ -61,10 +61,17 @@ public class WorkOrderSummaryDto
     public Guid Id { get; set; }
     public string WorkOrderNumber { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
+    public string Description { get; set; } = string.Empty;
     public Guid RequestId { get; set; }
     public string RequestNumber { get; set; } = string.Empty;
+    public string RequestTitle { get; set; } = string.Empty;
+    public Guid? TechnicianId { get; set; }
     public string TechnicianName { get; set; } = string.Empty;
+    public string TechnicianSpecialization { get; set; } = string.Empty;
+    public Guid? LocationId { get; set; }
     public string LocationName { get; set; } = string.Empty;
+    public string Building { get; set; } = string.Empty;
+    public string Room { get; set; } = string.Empty;
     public string Priority { get; set; } = string.Empty;
     public string Status { get; set; } = string.Empty;
     public DateTime? RequestedStartTime { get; set; }
@@ -194,6 +201,18 @@ public class CompleteWorkOrderDto
     public string? CompletionNotes { get; set; }
     public string? PhotoFileKey { get; set; }
     public string? PhotoOriginalFileName { get; set; }
+}
+
+public class RequestAssignmentDto
+{
+    public Guid AssignmentId { get; set; }
+    public Guid TechnicianId { get; set; }
+    public string TechnicianName { get; set; } = string.Empty;
+    public string TechnicianSpecialization { get; set; } = string.Empty;
+    public string AssignmentStatus { get; set; } = string.Empty;
+    public double MatchScore { get; set; }
+    public string ReasoningSummary { get; set; } = string.Empty;
+    public DateTime AssignedAt { get; set; }
 }
 
 public class PagedResultDto<T>

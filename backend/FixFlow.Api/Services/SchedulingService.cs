@@ -235,15 +235,30 @@ public class SchedulingService : ISchedulingService
         }
 
         // Determine SLA deadline if not provided
+        // Business rule: Use existing Priority Assessment SLA when available, otherwise fall back to SLAConfiguration
         var slaDeadline = request.SlaDeadline.HasValue ? NormalizeToUtc(request.SlaDeadline.Value) : (DateTime?)null;
         if (!slaDeadline.HasValue)
         {
-            var slaConfig = await _context.SLAConfigurations
-                .FirstOrDefaultAsync(s => s.PriorityLevel == request.Priority);
-            var resolutionHours = slaConfig?.ResolutionTimeHours
-                ?? priorityAssessment?.ResolutionTimeHours
-                ?? 24;
-            slaDeadline = DateTime.UtcNow.AddHours(resolutionHours);
+            int resolutionHours;
+            DateTime slaBaseTime;
+
+            if (priorityAssessment != null)
+            {
+                // Use Priority Assessment SLA (already determined by Component 2)
+                resolutionHours = priorityAssessment.ResolutionTimeHours;
+                // Calculate from request creation time, not current time
+                slaBaseTime = maintenanceRequest.CreatedAt;
+            }
+            else
+            {
+                // Fallback to SLAConfiguration only when no Priority Assessment exists
+                var slaConfig = await _context.SLAConfigurations
+                    .FirstOrDefaultAsync(s => s.PriorityLevel == request.Priority);
+                resolutionHours = slaConfig?.ResolutionTimeHours ?? 24;
+                slaBaseTime = maintenanceRequest.CreatedAt;
+            }
+
+            slaDeadline = slaBaseTime.AddHours(resolutionHours);
         }
 
         var durationMinutes = request.EstimatedDurationMinutes > 0 ? request.EstimatedDurationMinutes : 60;
@@ -440,7 +455,7 @@ public class SchedulingService : ISchedulingService
             (true, true) => $"{pythonPrefix}Schedule conflict detected and {workOrderPriority.ToString().ToLower()} priority requires Manager sign-off for technician {technician.User?.FirstName} {technician.User?.LastName}. Alternative slot proposed for Manager review.",
             (true, false) => $"{pythonPrefix}Schedule conflict detected for technician {technician.User?.FirstName} {technician.User?.LastName}. Alternative slot proposed for Manager review.",
             (false, true) => $"{pythonPrefix}No schedule conflict detected, but {workOrderPriority.ToString().ToLower()} priority requires Manager sign-off before scheduling. Proposed slot reserved for Manager review.",
-            (false, false) => $"{pythonPrefix}Selected an available technician slot within business hours and before the SLA deadline. Existing bookings were checked and no overlapping booking was detected."
+            (false, false) => $"Selected an available technician slot within business hours and before the SLA deadline. Existing bookings were checked and no overlapping booking was detected."
         };
 
         var checklist = new ValidationChecklistDto
@@ -551,7 +566,10 @@ public class SchedulingService : ISchedulingService
                 conflictDetected,
                 decisionSummary,
                 pythonAgentCalled,
-                pythonAgentSuccess = pythonResult?.Success ?? false
+                pythonAgentSuccess = pythonResult?.Success ?? false,
+                executionMode = pythonResult?.ExecutionMode ?? "not_invoked",
+                llmUsed = pythonResult?.LlmUsed,
+                schedulingPath = pythonResult?.SchedulingPath
             })
         };
 
@@ -584,112 +602,129 @@ public class SchedulingService : ISchedulingService
             ValidationResultJson = JsonSerializer.Serialize(checklist)
         };
 
-        // Add tool call records with actual data from DB queries and genuine timing
-        var activeStatusesForCount = new[]
+        // Add tool call records — prefer actual Python agent tool calls when available
+        if (pythonAgentCalled && pythonResult != null && pythonResult.ToolCalls.Count > 0)
         {
-            WorkOrderStatus.Proposed,
-            WorkOrderStatus.PendingManagerApproval,
-            WorkOrderStatus.Approved,
-            WorkOrderStatus.Scheduled,
-            WorkOrderStatus.InProgress,
-            WorkOrderStatus.Paused
-        };
-
-        var sw = Stopwatch.StartNew();
-        var activeBookingsCount = await _context.Set<WorkOrder>()
-            .CountAsync(w => !w.IsDeleted &&
-                             w.TechnicianId == technician.Id &&
-                             activeStatusesForCount.Contains(w.Status));
-        sw.Stop();
-        var techCalendarTimeMs = (int)sw.ElapsedMilliseconds;
-
-        sw.Restart();
-        var proposedStartLocal = ConvertToLocal(proposedStart);
-        var proposedDayOfWeek = (int)proposedStartLocal.DayOfWeek;
-        var actualBusinessHours = await _context.Set<BusinessHours>()
-            .FirstOrDefaultAsync(b => b.DayOfWeek == proposedDayOfWeek);
-        sw.Stop();
-        var businessHoursTimeMs = (int)sw.ElapsedMilliseconds;
-
-        sw.Restart();
-        var conflictingWorkOrdersForCount = await _context.Set<WorkOrder>()
-            .Where(w => !w.IsDeleted &&
-                        w.TechnicianId == technician.Id &&
-                        activeStatusesForCount.Contains(w.Status) &&
-                        w.ScheduledStartTime.HasValue &&
-                        w.ScheduledEndTime.HasValue &&
-                        w.ScheduledStartTime.Value < proposedEnd &&
-                        w.ScheduledEndTime.Value > proposedStart)
-            .CountAsync();
-        sw.Stop();
-        var existingWorkOrdersTimeMs = (int)sw.ElapsedMilliseconds;
-
-        sw.Restart();
-        // Proposal was already created above; record the time to serialize its data
-        var proposalSerializationData = new { proposalCreated = true, proposalId = proposal.Id };
-        sw.Stop();
-        var proposalCreationTimeMs = (int)sw.ElapsedMilliseconds;
-
-        sw.Restart();
-        // finalValidation was already computed above; record the serialization time
-        var validationSerializationData = finalValidation;
-        sw.Stop();
-        var validationTimeMs = (int)sw.ElapsedMilliseconds;
-
-        schedulingStep.ToolCalls.Add(new AgentToolCall
-        {
-            StepId = schedulingStep.Id,
-            ToolName = "GetTechnicianCalendar",
-            InputJson = JsonSerializer.Serialize(new { technicianId = technician.Id }),
-            OutputJson = JsonSerializer.Serialize(new { isAvailable = technician.IsAvailable, activeBookingsCount }),
-            ExecutionTimeMs = techCalendarTimeMs,
-            Success = true
-        });
-
-        schedulingStep.ToolCalls.Add(new AgentToolCall
-        {
-            StepId = schedulingStep.Id,
-            ToolName = "GetBusinessHours",
-            InputJson = JsonSerializer.Serialize(new { date = proposedStartLocal.ToString("yyyy-MM-dd"), dayOfWeek = proposedDayOfWeek }),
-            OutputJson = JsonSerializer.Serialize(new
+            foreach (var tc in pythonResult.ToolCalls)
             {
-                open = actualBusinessHours?.OpenTime.ToString(@"hh\:mm") ?? "N/A",
-                close = actualBusinessHours?.CloseTime.ToString(@"hh\:mm") ?? "N/A",
-                isWorkingDay = actualBusinessHours?.IsWorkingDay ?? false
-            }),
-            ExecutionTimeMs = businessHoursTimeMs,
-            Success = actualBusinessHours != null
-        });
-
-        schedulingStep.ToolCalls.Add(new AgentToolCall
+                schedulingStep.ToolCalls.Add(new AgentToolCall
+                {
+                    StepId = schedulingStep.Id,
+                    ToolName = tc.ToolName,
+                    InputJson = tc.InputParams?.GetRawText() ?? "{}",
+                    OutputJson = tc.OutputParams?.GetRawText() ?? "{}",
+                    ExecutionTimeMs = tc.ExecutionTimeMs,
+                    Success = tc.Success,
+                    ErrorMessage = tc.ErrorMessage
+                });
+            }
+        }
+        else
         {
-            StepId = schedulingStep.Id,
-            ToolName = "GetExistingWorkOrders",
-            InputJson = JsonSerializer.Serialize(new { technicianId = technician.Id, checkDate = proposedStartLocal.ToString("yyyy-MM-dd") }),
-            OutputJson = JsonSerializer.Serialize(new { conflictCount = conflictingWorkOrdersForCount, activeBookingsCount }),
-            ExecutionTimeMs = existingWorkOrdersTimeMs,
-            Success = true
-        });
+            var activeStatusesForCount = new[]
+            {
+                WorkOrderStatus.Proposed,
+                WorkOrderStatus.PendingManagerApproval,
+                WorkOrderStatus.Approved,
+                WorkOrderStatus.Scheduled,
+                WorkOrderStatus.InProgress,
+                WorkOrderStatus.Paused
+            };
 
-        schedulingStep.ToolCalls.Add(new AgentToolCall
-        {
-            StepId = schedulingStep.Id,
-            ToolName = "CreateScheduleProposal",
-            InputJson = JsonSerializer.Serialize(new { start = proposedStart, end = proposedEnd, duration = durationMinutes }),
-            OutputJson = JsonSerializer.Serialize(proposalSerializationData),
-            ExecutionTimeMs = proposalCreationTimeMs,
-            Success = true
-        });
+            var sw = Stopwatch.StartNew();
+            var activeBookingsCount = await _context.Set<WorkOrder>()
+                .CountAsync(w => !w.IsDeleted &&
+                                 w.TechnicianId == technician.Id &&
+                                 activeStatusesForCount.Contains(w.Status));
+            sw.Stop();
+            var techCalendarTimeMs = (int)sw.ElapsedMilliseconds;
 
-        schedulingStep.ToolCalls.Add(new AgentToolCall
-        {
-            StepId = schedulingStep.Id,
-            ToolName = "ValidateSchedule",
-            InputJson = JsonSerializer.Serialize(new { technicianId = technician.Id, start = proposedStart, end = proposedEnd }),
-            OutputJson = JsonSerializer.Serialize(validationSerializationData),
-            ExecutionTimeMs = validationTimeMs,
-            Success = finalValidation.IsValid
-        });
+            sw.Restart();
+            var proposedStartLocal = ConvertToLocal(proposedStart);
+            var proposedDayOfWeek = (int)proposedStartLocal.DayOfWeek;
+            var actualBusinessHours = await _context.Set<BusinessHours>()
+                .FirstOrDefaultAsync(b => b.DayOfWeek == proposedDayOfWeek);
+            sw.Stop();
+            var businessHoursTimeMs = (int)sw.ElapsedMilliseconds;
+
+            sw.Restart();
+            var conflictingWorkOrdersForCount = await _context.Set<WorkOrder>()
+                .Where(w => !w.IsDeleted &&
+                            w.TechnicianId == technician.Id &&
+                            activeStatusesForCount.Contains(w.Status) &&
+                            w.ScheduledStartTime.HasValue &&
+                            w.ScheduledEndTime.HasValue &&
+                            w.ScheduledStartTime.Value < proposedEnd &&
+                            w.ScheduledEndTime.Value > proposedStart)
+                .CountAsync();
+            sw.Stop();
+            var existingWorkOrdersTimeMs = (int)sw.ElapsedMilliseconds;
+
+            sw.Restart();
+            var proposalSerializationData = new { proposalCreated = true, proposalId = proposal.Id };
+            sw.Stop();
+            var proposalCreationTimeMs = (int)sw.ElapsedMilliseconds;
+
+            sw.Restart();
+            var validationSerializationData = finalValidation;
+            sw.Stop();
+            var validationTimeMs = (int)sw.ElapsedMilliseconds;
+
+            schedulingStep.ToolCalls.Add(new AgentToolCall
+            {
+                StepId = schedulingStep.Id,
+                ToolName = "GetTechnicianCalendar",
+                InputJson = JsonSerializer.Serialize(new { technicianId = technician.Id }),
+                OutputJson = JsonSerializer.Serialize(new { isAvailable = technician.IsAvailable, activeBookingsCount }),
+                ExecutionTimeMs = techCalendarTimeMs,
+                Success = true
+            });
+
+            schedulingStep.ToolCalls.Add(new AgentToolCall
+            {
+                StepId = schedulingStep.Id,
+                ToolName = "GetBusinessHours",
+                InputJson = JsonSerializer.Serialize(new { date = proposedStartLocal.ToString("yyyy-MM-dd"), dayOfWeek = proposedDayOfWeek }),
+                OutputJson = JsonSerializer.Serialize(new
+                {
+                    open = actualBusinessHours?.OpenTime.ToString(@"hh\:mm") ?? "N/A",
+                    close = actualBusinessHours?.CloseTime.ToString(@"hh\:mm") ?? "N/A",
+                    isWorkingDay = actualBusinessHours?.IsWorkingDay ?? false
+                }),
+                ExecutionTimeMs = businessHoursTimeMs,
+                Success = actualBusinessHours != null
+            });
+
+            schedulingStep.ToolCalls.Add(new AgentToolCall
+            {
+                StepId = schedulingStep.Id,
+                ToolName = "GetExistingWorkOrders",
+                InputJson = JsonSerializer.Serialize(new { technicianId = technician.Id, checkDate = proposedStartLocal.ToString("yyyy-MM-dd") }),
+                OutputJson = JsonSerializer.Serialize(new { conflictCount = conflictingWorkOrdersForCount, activeBookingsCount }),
+                ExecutionTimeMs = existingWorkOrdersTimeMs,
+                Success = true
+            });
+
+            schedulingStep.ToolCalls.Add(new AgentToolCall
+            {
+                StepId = schedulingStep.Id,
+                ToolName = "CreateScheduleProposal",
+                InputJson = JsonSerializer.Serialize(new { start = proposedStart, end = proposedEnd, duration = durationMinutes }),
+                OutputJson = JsonSerializer.Serialize(proposalSerializationData),
+                ExecutionTimeMs = proposalCreationTimeMs,
+                Success = true
+            });
+
+            schedulingStep.ToolCalls.Add(new AgentToolCall
+            {
+                StepId = schedulingStep.Id,
+                ToolName = "ValidateSchedule",
+                InputJson = JsonSerializer.Serialize(new { technicianId = technician.Id, start = proposedStart, end = proposedEnd }),
+                OutputJson = JsonSerializer.Serialize(validationSerializationData),
+                ExecutionTimeMs = validationTimeMs,
+                Success = finalValidation.IsValid
+            });
+        }
 
         agentWorkflow.Steps.Add(schedulingStep);
 

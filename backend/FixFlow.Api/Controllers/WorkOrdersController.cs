@@ -67,6 +67,13 @@ public class WorkOrdersController : ControllerBase
         return Ok(ApiResponse<List<TechnicianSummaryDto>>.SuccessResult(technicians));
     }
 
+    [HttpGet("requests/{requestId}/assignment")]
+    public async Task<ActionResult<ApiResponse<RequestAssignmentDto?>>> GetAssignmentForRequest(Guid requestId)
+    {
+        var assignment = await _workOrderService.GetAssignmentForRequestAsync(requestId);
+        return Ok(ApiResponse<RequestAssignmentDto?>.SuccessResult(assignment));
+    }
+
     [HttpGet("{id}")]
     public async Task<ActionResult<ApiResponse<WorkOrderDto>>> GetWorkOrderById(Guid id)
     {
