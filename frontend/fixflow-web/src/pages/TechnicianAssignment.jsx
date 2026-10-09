@@ -2,19 +2,30 @@ import React, { useState, useEffect } from 'react';
 import { UserCheck, Sparkles, CheckCircle } from 'lucide-react';
 import { api , technicianApi } from '../services/api';
 
+// Priority ranking used to order the matching list: Critical → High → Medium → Low.
+// Requests without a Priority Agent output rank last.
+const PRIORITY_RANK = { Critical: 4, High: 3, Medium: 2, Low: 1 };
+
+// A request may run the AI Assignment Agent ONLY when BOTH agent outputs are valid:
+// a Required Skill from the Classification Agent, and an available (non-Pending)
+// Priority from the Priority Agent.
+const isAssignmentReady = (r) => {
+  const skill = r.requiredSkill ? String(r.requiredSkill).trim() : '';
+  const priority = r.priorityLevel ? String(r.priorityLevel).trim() : '';
+  return skill !== '' && priority !== '' && priority.toLowerCase() !== 'pending';
+};
+
 export default function TechnicianAssignment() {
   const [technicians, setTechnicians] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [apiError, setApiError] = useState('');
-  
-  const [requestData, setRequestData] = useState({
-    requestId: '',
-    requiredSkill: '',
-    priorityLevel: ''
-  });
-
-  const [recommendation, setRecommendation] = useState(null);
   const [assignStatus, setAssignStatus] = useState('');
+
+  // Agent outputs (Classification + Priority) for EVERY unassigned maintenance request.
+  const [requestOutputs, setRequestOutputs] = useState([]);
+  // Id of the request currently going through the one-click assignment flow.
+  const [processingRequestId, setProcessingRequestId] = useState(null);
+  // Result of the last completed one-click assignment (display only).
+  const [lastAssignment, setLastAssignment] = useState(null);
 
   const fetchTechnicians = async () => {
     try {
@@ -27,43 +38,82 @@ export default function TechnicianAssignment() {
     }
   };
 
-  const fetchLatestRequest = async () => {
+  // Loads every page of a paged list endpoint (e.g. /requests, /priority-assessments).
+  const fetchAllPages = async (endpoint) => {
+    const allItems = [];
+    let page = 1;
+    let totalPages = 1;
+    do {
+      const res = await api.get(`${endpoint}?page=${page}&pageSize=100`);
+      const data = res.data || {};
+      const items = data.items || [];
+      allItems.push(...items);
+      totalPages = data.totalPages || 1;
+      page += 1;
+    } while (page <= totalPages && allItems.length > 0);
+    return allItems;
+  };
+
+  // Loads the Classification Agent output (category/required skill) and the Priority Agent
+  // output (Risk & Priority Assessment) for EVERY maintenance request that has them,
+  // not just the latest request.
+  const fetchRequestAgentOutputs = async () => {
     try {
-      // Retrieving the basic data of the latest request and the required skill identified by the Classification Agent.
-      const requestsRes = await technicianApi.fetchRequests();
-      const requestsList = requestsRes.data?.items || requestsRes.data || [];
-      
-      if (requestsList.length > 0) {
-        const latestReq = requestsList[0];
-        const requestId = latestReq.id || latestReq.requestId;
+      // Retrieving ALL maintenance requests (the endpoint returns them newest-first).
+      const requestsList = await fetchAllPages('/requests');
 
-        // Category/Skill obtained from Classification
-        const dynamicSkill = latestReq.category || latestReq.requiredSkill || 'General';
-
-        // Obtaining the priority level relevant to this specific request from the Priority Agent (Risk & Priority Assessment).
-        let dynamicPriority = 'Normal';
-        try {
-          const assessmentRes = await api.get('/priority-assessments');
-          const assessmentsList = assessmentRes.data?.items || assessmentRes.data || [];
-          
-          const matchedAssessment = assessmentsList.find(
-            a => a.requestId === requestId || a.id === requestId
-          ) || assessmentsList[0];
-          
-          if (matchedAssessment) {
-            dynamicPriority = matchedAssessment.priority || matchedAssessment.riskLevel || 'Normal';
-          }
-        } catch (priorityErr) {
-          console.warn("Could not fetch dynamic priority assessment:", priorityErr);
-        }
-
-        // Dynamically incorporating the actual outputs of both agents into the State.
-        setRequestData({
-          requestId: requestId,
-          requiredSkill: dynamicSkill,
-          priorityLevel: dynamicPriority
-        });
+      // Retrieving ALL Priority Agent outputs (Risk & Priority Assessments), newest-first.
+      let assessmentsList = [];
+      try {
+        assessmentsList = await fetchAllPages('/priority-assessments');
+      } catch (priorityErr) {
+        console.warn("Could not fetch priority assessments:", priorityErr);
       }
+
+      // Latest assessment per request (the list is newest-first, so the first match wins).
+      const assessmentByRequest = new Map();
+      assessmentsList.forEach(a => {
+        const key = String(a.requestId || a.id || '');
+        if (!assessmentByRequest.has(key)) {
+          assessmentByRequest.set(key, a);
+        }
+      });
+
+      // Combining the Classification + Priority agent outputs for every request that has them.
+      const outputs = requestsList
+        .map(req => {
+          const requestId = req.id || req.requestId;
+          const assessment = assessmentByRequest.get(String(requestId));
+          return {
+            requestId: requestId,
+            requestNumber: req.requestNumber || requestId,
+            title: req.title || '',
+            // Category/Skill obtained from the Classification Agent
+            requiredSkill: req.category || req.requiredSkill || null,
+            hasClassification: !!(req.category || req.requiredSkill || req.hasClassification),
+            // Priority obtained from the Priority Agent (Risk & Priority Assessment)
+            priorityLevel: assessment ? (assessment.priority || assessment.riskLevel || null) : null,
+            hasPriority: !!assessment
+          };
+        })
+        .filter(r => r.hasClassification || r.hasPriority);
+
+      // Hiding requests that already have a technician assigned (Assignment record with
+      // status "Assigned"). "Recommended" is only the AI agent's suggestion that has not
+      // been approved yet, so those requests remain visible for the manager to assign.
+      const unassigned = await Promise.all(outputs.map(async (output) => {
+        try {
+          const res = await workOrderApi.getAssignmentForRequest(output.requestId);
+          const assignment = res?.success && res.data ? res.data : null;
+          const assignmentStatus = assignment?.assignmentStatus || assignment?.AssignmentStatus;
+          return assignmentStatus === 'Assigned' ? null : output;
+        } catch (assignErr) {
+          console.warn(`Could not check assignment for request ${output.requestId}:`, assignErr);
+          return output;
+        }
+      }));
+
+      setRequestOutputs(unassigned.filter(Boolean));
     } catch (err) {
       console.error("Error fetching dynamic request data:", err);
     }
@@ -71,71 +121,87 @@ export default function TechnicianAssignment() {
 
   useEffect(() => {
     fetchTechnicians();
-    fetchLatestRequest();
+    fetchRequestAgentOutputs();
   }, []);
 
-  const handleGetRecommendation = async () => {
-    setLoading(true);
+  // ONE-CLICK flow for a single request: recommend the best technician via the existing
+  // Assignment Agent matching logic, then immediately assign that technician. Uses this
+  // specific request's Classification Agent output (required skill) and Priority Agent
+  // output (priority level). One technician is assigned per request; technician
+  // availability is NOT modified (a technician may receive multiple requests).
+  const handleRunAssignment = async (req) => {
+    if (processingRequestId) return;
+    // Guard: assignment requires a valid Required Skill AND a non-Pending Priority.
+    if (!isAssignmentReady(req)) return;
     setAssignStatus('');
+    setLastAssignment(null);
+    setProcessingRequestId(req.requestId);
     try {
+      // Guard: never process a request that already has a technician assigned.
+      try {
+        const check = await workOrderApi.getAssignmentForRequest(req.requestId);
+        const existing = check?.success && check.data ? check.data : null;
+        const existingStatus = existing?.assignmentStatus || existing?.AssignmentStatus;
+        if (existingStatus === 'Assigned') {
+          setRequestOutputs(prev =>
+            prev.filter(r => String(r.requestId) !== String(req.requestId))
+          );
+          setAssignStatus(`Request #${req.requestNumber} already has a technician assigned — removed from the matching list.`);
+          return;
+        }
+      } catch (checkErr) {
+        console.warn("Could not verify existing assignment:", checkErr);
+      }
+
+      // 1. Existing technician recommendation API (unchanged matching logic).
       const res = await technicianApi.fetchRecommendation({
-        requestId: requestData.requestId,
-        requiredSkill: requestData.requiredSkill,
-        priorityLevel: requestData.priorityLevel
+        requestId: req.requestId,
+        requiredSkill: req.requiredSkill || '',
+        priorityLevel: req.priorityLevel || 'Normal'
       });
-      // Passing only the `.data` from the Axios response to the state.
-      setRecommendation(res.data || res);
-    } catch (err) {
-      console.error("Error connecting via Gateway:", err);
-      alert("Error: Make sure C# / Python backends are running.");
-    } finally {
-      setLoading(false);
-    }
-  };
+      const rec = res?.data || res;
+      const techId =
+        rec?.recommendedTechnicianId ||
+        rec?.RecommendedTechnicianId ||
+        rec?.top_match_id ||
+        rec?.id;
+      if (!techId) {
+        throw new Error('The Assignment Agent did not return a recommended technician.');
+      }
 
-  const handleAssign = async () => {
-    // Obtaining the correct Technician ID from the 'topCandidate' or recommendation.
-    const techId = 
-      recommendation?.recommendedTechnicianId || 
-      recommendation?.RecommendedTechnicianId || 
-      recommendation?.top_match_id || 
-      recommendation?.id ||
-      // Obtaining the correct Technician ID from the 'topCandidate' or recommendation.
-      technicians.find(t => (t.fullName || t.name) === displayTechnicianName)?.id;
-    
-    if (!techId) {
-      alert("Please select a valid technician before assigning!");
-      return;
-    }
-
-    try {
+      // 2. Existing assignment API — saves the Assignment record with status "Assigned".
       await technicianApi.assignTechnician({
-        requestId: String(requestData.requestId), // Sending the GUID as a string
-        requiredSkill: String(requestData.requiredSkill),
-        priorityLevel: String(requestData.priorityLevel),
+        requestId: req.requestId,
+        requiredSkill: req.requiredSkill || '',
+        priorityLevel: req.priorityLevel || 'Normal',
         technicianId: techId
       });
 
+      // 3. Remove the request from the matching list locally (no page reload).
+      setRequestOutputs(prev =>
+        prev.filter(r => String(r.requestId) !== String(req.requestId))
+      );
+
+      setLastAssignment({
+        requestNumber: req.requestNumber,
+        technicianName: rec?.technicianName || rec?.TechnicianName || 'N/A',
+        matchScore: rec?.matchScore ?? rec?.MatchScore ?? 0.85,
+        reasoning: rec?.reasoningSummary || rec?.ReasoningSummary || rec?.reasoning || 'Best fit based on availability and skills.'
+      });
       setAssignStatus('Technician assigned successfully!');
     } catch (err) {
-      console.error("Error assigning technician:", err);
-      setAssignStatus(`Assignment failed: ${err.message}`);
+      console.error("Error during AI assignment:", err);
+      setAssignStatus(`Assignment failed for request #${req.requestNumber}: ${err.message}`);
+    } finally {
+      setProcessingRequestId(null);
     }
   };
 
-  // To securely handle various property formats coming from the backend
-  const topCandidate = recommendation?.recommended_candidates?.[0] || recommendation || {};
-  
-  const displayTechnicianName = 
-    topCandidate.technicianName || 
-    topCandidate.TechnicianName || 
-    topCandidate.technician_name || 
-    topCandidate.name || 
-    topCandidate.employeeCode || 
-    'N/A';
-
-  const displayMatchScore = topCandidate.matchScore || topCandidate.match_score || 0.85;
-  const displayReasoning = topCandidate.reasoningSummary || topCandidate.ReasoningSummary || topCandidate.reasoning || 'Best fit based on availability and skills.';
+  // Priority order: Critical → High → Medium → Low. The sort is stable, so requests
+  // with the same priority keep their existing newest-first order.
+  const sortedRequestOutputs = [...requestOutputs].sort(
+    (a, b) => (PRIORITY_RANK[b.priorityLevel] || 0) - (PRIORITY_RANK[a.priorityLevel] || 0)
+  );
 
   return (
     <div style={{ padding: '30px', fontFamily: 'sans-serif', minHeight: '100vh' }}>
@@ -190,38 +256,38 @@ export default function TechnicianAssignment() {
           <h3><Sparkles size={20} color="#6366f1" /> AI Technician Matching</h3>
           
           <div style={{ background: '#f8fafc', padding: '15px', borderRadius: '6px', margin: '15px 0', color: '#333' }}>
-            <h4>Maintenance Request (#{requestData.requestId || 'Loading...'})</h4>
-            <p><strong>Required Skill:</strong> {requestData.requiredSkill || 'Pending...'}</p>
-            <p><strong>Priority:</strong> {requestData.priorityLevel || 'Pending...'}</p>
+            <h4>Maintenance Requests — Agent Outputs ({requestOutputs.length})</h4>
+            <div style={{ maxHeight: '300px', overflowY: 'auto' }}>
+              {requestOutputs.length === 0 ? (
+                <p>No Classification / Priority agent outputs available yet.</p>
+              ) : (
+                sortedRequestOutputs.map(r => (
+                  <div key={r.requestId} style={{ padding: '10px 0', borderBottom: '1px solid #e2e8f0' }}>
+                    <strong>Request #{r.requestNumber}{r.title ? ` — ${r.title}` : ''}</strong>
+                    <p style={{ margin: '6px 0 0 0' }}><strong>Required Skill:</strong> {r.requiredSkill || 'Pending...'}</p>
+                    <p style={{ margin: '2px 0 0 0' }}><strong>Priority:</strong> {r.priorityLevel || 'Pending...'}</p>
+                    <button
+                      onClick={() => handleRunAssignment(r)}
+                      disabled={processingRequestId !== null || !isAssignmentReady(r)}
+                      style={{
+                        backgroundColor: '#6366f1', color: '#fff', border: 'none', padding: '10px 18px',
+                        borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold', marginTop: '8px'
+                      }}
+                    >
+                      {String(processingRequestId) === String(r.requestId) ? 'AI Agent Analyzing...' : 'Run AI Assignment Agent'}
+                    </button>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
 
-          <button 
-            onClick={handleGetRecommendation}
-            disabled={loading || !requestData.requestId}
-            style={{
-              backgroundColor: '#6366f1', color: '#fff', border: 'none', padding: '10px 18px',
-              borderRadius: '5px', cursor: 'pointer', fontWeight: 'bold'
-            }}
-          >
-            {loading ? 'AI Agent Analyzing...' : 'Run AI Assignment Agent'}
-          </button>
-
-          {recommendation && (
+          {lastAssignment && (
             <div style={{ marginTop: '20px', padding: '15px', border: '2px solid #6366f1', borderRadius: '8px', background: '#eef2ff', color: '#333' }}>
-              <h4 style={{ margin: '0 0 10px 0', color: '#4338ca' }}>Recommended Candidate</h4>
-              <p><strong>Technician:</strong> {displayTechnicianName}</p>
-              <p><strong>Match Confidence:</strong> {(displayMatchScore * 100).toFixed(0)}%</p>
-              <p><strong>Reasoning:</strong> {displayReasoning}</p>
-
-              <button 
-                onClick={handleAssign}
-                style={{
-                  backgroundColor: '#10b981', color: '#fff', border: 'none', padding: '8px 15px',
-                  borderRadius: '5px', cursor: 'pointer', marginTop: '10px', fontWeight: 'bold'
-                }}
-              >
-                Approve & Assign Job
-              </button>
+              <h4 style={{ margin: '0 0 10px 0', color: '#4338ca' }}>Assigned Technician — Request #{lastAssignment.requestNumber}</h4>
+              <p><strong>Technician:</strong> {lastAssignment.technicianName}</p>
+              <p><strong>Match Confidence:</strong> {(lastAssignment.matchScore * 100).toFixed(0)}%</p>
+              <p><strong>Reasoning:</strong> {lastAssignment.reasoning}</p>
             </div>
           )}
 
