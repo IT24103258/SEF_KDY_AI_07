@@ -206,6 +206,129 @@ public class SchedulingService : ISchedulingService
         return result;
     }
 
+    public async Task<SlotSearchResult> FindFirstAvailableSlotAsync(
+        Guid technicianId,
+        DateTime anchorStartUtc,
+        int durationMinutes,
+        string priority,
+        DateTime? slaDeadlineUtc,
+        int maxSearchDays = 7)
+    {
+        var result = new SlotSearchResult();
+        var anchorUtc = NormalizeToUtc(anchorStartUtc);
+        var anchorLocal = ConvertToLocal(anchorUtc);
+
+        await EnsureDefaultBusinessHoursAsync();
+
+        var technician = await _context.Technicians
+            .Include(t => t.User)
+            .FirstOrDefaultAsync(t => t.Id == technicianId && !t.IsDeleted);
+        var technicianUsable = technician != null && technician.User != null && technician.User.IsActive && technician.IsAvailable;
+
+        var hoursLookup = (await _context.Set<BusinessHours>().ToListAsync())
+            .GroupBy(b => b.DayOfWeek)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        // Pre-fetch bookings that could possibly overlap any candidate in the search window.
+        var searchWindowEndUtc = TimeZoneInfo.ConvertTimeToUtc(
+            DateTime.SpecifyKind(anchorLocal.Date.AddDays(maxSearchDays), DateTimeKind.Unspecified), FacilityTimeZone);
+
+        var activeStatuses = new[]
+        {
+            WorkOrderStatus.Proposed,
+            WorkOrderStatus.PendingManagerApproval,
+            WorkOrderStatus.Approved,
+            WorkOrderStatus.Scheduled,
+            WorkOrderStatus.InProgress,
+            WorkOrderStatus.Paused
+        };
+
+        var bookedSlots = await _context.Set<WorkOrder>()
+            .Where(w => !w.IsDeleted &&
+                        w.TechnicianId == technicianId &&
+                        activeStatuses.Contains(w.Status) &&
+                        w.ScheduledStartTime.HasValue &&
+                        w.ScheduledEndTime.HasValue &&
+                        w.ScheduledStartTime.Value < searchWindowEndUtc &&
+                        w.ScheduledEndTime.Value > anchorUtc)
+            .Select(w => new { w.ScheduledStartTime, w.ScheduledEndTime })
+            .ToListAsync();
+
+        var hardSlaPriority = priority.Equals("Critical", StringComparison.OrdinalIgnoreCase) ||
+                              priority.Equals("High", StringComparison.OrdinalIgnoreCase);
+
+        for (int dayOffset = 0; dayOffset < maxSearchDays; dayOffset++)
+        {
+            var checkDateLocal = anchorLocal.Date.AddDays(dayOffset);
+            if (!hoursLookup.TryGetValue((int)checkDateLocal.DayOfWeek, out var bh) || !bh.IsWorkingDay)
+                continue;
+
+            var dayOpenLocal = checkDateLocal.Add(bh.OpenTime);
+            var dayCloseLocal = checkDateLocal.Add(bh.CloseTime);
+
+            DateTime startSearchLocal;
+            if (dayOffset == 0 && anchorLocal > dayOpenLocal)
+            {
+                var snappedMinutes = (anchorLocal.Minute / 30) * 30;
+                startSearchLocal = new DateTime(checkDateLocal.Year, checkDateLocal.Month, checkDateLocal.Day,
+                    anchorLocal.Hour, snappedMinutes, 0, DateTimeKind.Unspecified);
+                if (startSearchLocal < anchorLocal)
+                    startSearchLocal = startSearchLocal.AddMinutes(30);
+            }
+            else
+            {
+                startSearchLocal = dayOpenLocal;
+            }
+
+            while (startSearchLocal.AddMinutes(durationMinutes) <= dayCloseLocal)
+            {
+                var endSearchLocal = startSearchLocal.AddMinutes(durationMinutes);
+                var candidateStartUtc = TimeZoneInfo.ConvertTimeToUtc(
+                    DateTime.SpecifyKind(startSearchLocal, DateTimeKind.Unspecified), FacilityTimeZone);
+                var candidateEndUtc = TimeZoneInfo.ConvertTimeToUtc(
+                    DateTime.SpecifyKind(endSearchLocal, DateTimeKind.Unspecified), FacilityTimeZone);
+
+                var withinBusinessHours = startSearchLocal.TimeOfDay >= bh.OpenTime &&
+                                          endSearchLocal.TimeOfDay <= bh.CloseTime &&
+                                          startSearchLocal.Date == endSearchLocal.Date;
+
+                var overlapsBooking = false;
+                if (technicianUsable && withinBusinessHours)
+                {
+                    foreach (var booking in bookedSlots)
+                    {
+                        if (booking.ScheduledStartTime!.Value < candidateEndUtc &&
+                            booking.ScheduledEndTime!.Value > candidateStartUtc)
+                        {
+                            overlapsBooking = true;
+                            break;
+                        }
+                    }
+                }
+
+                var slaOk = !hardSlaPriority || !slaDeadlineUtc.HasValue || candidateEndUtc <= slaDeadlineUtc.Value;
+
+                if (technicianUsable && withinBusinessHours && !overlapsBooking && slaOk)
+                {
+                    // Confirm with the authoritative validator so acceptance semantics stay identical.
+                    var confirmation = await ValidateScheduleAsync(
+                        technicianId, candidateStartUtc, candidateEndUtc, durationMinutes, priority, slaDeadlineUtc);
+                    if (confirmation.IsValid)
+                    {
+                        result.Found = true;
+                        result.ProposedStartUtc = candidateStartUtc;
+                        result.ProposedEndUtc = candidateEndUtc;
+                        return result;
+                    }
+                }
+
+                startSearchLocal = startSearchLocal.AddMinutes(30);
+            }
+        }
+
+        return result;
+    }
+
     public async Task<ScheduleProposalDto> CreateConflictFreeWorkOrderAsync(ScheduleRequestDto request, Guid requesterUserId)
     {
         var maintenanceRequest = await _context.MaintenanceRequests
@@ -347,59 +470,19 @@ public class SchedulingService : ISchedulingService
             }
         }
 
+        var workOrderPriority = Enum.TryParse<WorkOrderPriority>(request.Priority, true, out var parsedPriority) ? parsedPriority : WorkOrderPriority.Medium;
+        var isHighImpactPriority = workOrderPriority == WorkOrderPriority.High || workOrderPriority == WorkOrderPriority.Critical;
+
         if (!slotFound)
         {
-            // Search for earliest valid conflict-free slot within business hours, anchored to the requested start
-            var tz = TimeZoneInfo.FindSystemTimeZoneById("Asia/Colombo");
             var searchAnchorUtc = requestedStart ?? DateTime.UtcNow;
-            var searchBaseLocal = TimeZoneInfo.ConvertTimeFromUtc(
-                searchAnchorUtc.Kind != DateTimeKind.Utc ? searchAnchorUtc.ToUniversalTime() : searchAnchorUtc, tz);
-            var maxSearchDays = 7;
-
-            for (int dayOffset = 0; dayOffset < maxSearchDays && !slotFound; dayOffset++)
+            var searchResult = await FindFirstAvailableSlotAsync(
+                technician.Id, searchAnchorUtc, durationMinutes, request.Priority, slaDeadline);
+            if (searchResult.Found)
             {
-                var checkDateLocal = searchBaseLocal.Date.AddDays(dayOffset);
-                var dayOfWeek = (int)checkDateLocal.DayOfWeek;
-                var bh = await _context.Set<BusinessHours>().FirstOrDefaultAsync(b => b.DayOfWeek == dayOfWeek);
-
-                if (bh == null || !bh.IsWorkingDay) continue;
-
-                var dayOpenLocal = checkDateLocal.Add(bh.OpenTime);
-                var dayCloseLocal = checkDateLocal.Add(bh.CloseTime);
-
-                DateTime startSearchLocal;
-                if (dayOffset == 0 && searchBaseLocal > dayOpenLocal)
-                {
-                    var snappedMinutes = (searchBaseLocal.Minute / 30) * 30;
-                    startSearchLocal = new DateTime(checkDateLocal.Year, checkDateLocal.Month, checkDateLocal.Day,
-                        searchBaseLocal.Hour, snappedMinutes, 0, DateTimeKind.Unspecified);
-                    if (startSearchLocal < searchBaseLocal)
-                        startSearchLocal = startSearchLocal.AddMinutes(30);
-                }
-                else
-                {
-                    startSearchLocal = dayOpenLocal;
-                }
-
-                while (startSearchLocal.AddMinutes(durationMinutes) <= dayCloseLocal)
-                {
-                    var endSearchLocal = startSearchLocal.AddMinutes(durationMinutes);
-                    var startSearchUtc = TimeZoneInfo.ConvertTimeToUtc(
-                        DateTime.SpecifyKind(startSearchLocal, DateTimeKind.Unspecified), tz);
-                    var endSearchUtc = TimeZoneInfo.ConvertTimeToUtc(
-                        DateTime.SpecifyKind(endSearchLocal, DateTimeKind.Unspecified), tz);
-
-                    var slotVal = await ValidateScheduleAsync(technician.Id, startSearchUtc, endSearchUtc, durationMinutes, request.Priority, slaDeadline);
-                    if (slotVal.IsValid)
-                    {
-                        proposedStart = startSearchUtc;
-                        proposedEnd = endSearchUtc;
-                        slotFound = true;
-                        break;
-                    }
-
-                    startSearchLocal = startSearchLocal.AddMinutes(30);
-                }
+                proposedStart = searchResult.ProposedStartUtc;
+                proposedEnd = searchResult.ProposedEndUtc;
+                slotFound = true;
             }
         }
 
@@ -439,24 +522,29 @@ public class SchedulingService : ISchedulingService
             conflictDetails.AddRange(finalValidation.Conflicts);
         }
 
-        var workOrderPriority = Enum.TryParse<WorkOrderPriority>(request.Priority, true, out var p) ? p : WorkOrderPriority.Medium;
+        var requiresApproval = conflictDetected || isHighImpactPriority;
 
-        var isHighImpactPriority = workOrderPriority == WorkOrderPriority.High || workOrderPriority == WorkOrderPriority.Critical;
+        var technicianName = $"{technician.User?.FirstName} {technician.User?.LastName}".Trim();
+        var hasBookingConflict = conflictDetails.Any(c => c.ExistingWorkOrderId != Guid.Empty);
+        var noSlotFound = conflictDetails.Any(c => c.Reason != null && c.Reason.Contains("No conflict-free slot", StringComparison.OrdinalIgnoreCase));
 
-        var pythonContributed = pythonAgentCalled && pythonResult is { Success: true } && slotFound;
-        var pythonPrefix = pythonAgentCalled
-            ? (pythonResult is { Success: true }
-                ? "Python Scheduling Agent was invoked and validated successfully. "
-                : "Python Scheduling Agent was invoked but did not return a usable result; deterministic C# scheduling was used. ")
-            : "";
-
-        var decisionSummary = (conflictDetected, isHighImpactPriority) switch
+        var decisionSummary = SchedulingDecisionSummaries.Build(new SchedulingSummaryInput
         {
-            (true, true) => $"{pythonPrefix}Schedule conflict detected and {workOrderPriority.ToString().ToLower()} priority requires Manager sign-off for technician {technician.User?.FirstName} {technician.User?.LastName}. Alternative slot proposed for Manager review.",
-            (true, false) => $"{pythonPrefix}Schedule conflict detected for technician {technician.User?.FirstName} {technician.User?.LastName}. Alternative slot proposed for Manager review.",
-            (false, true) => $"{pythonPrefix}No schedule conflict detected, but {workOrderPriority.ToString().ToLower()} priority requires Manager sign-off before scheduling. Proposed slot reserved for Manager review.",
-            (false, false) => $"Selected an available technician slot within business hours and before the SLA deadline. Existing bookings were checked and no overlapping booking was detected."
-        };
+            TechnicianName = technicianName,
+            Priority = workOrderPriority.ToString(),
+            HighImpactPriority = isHighImpactPriority,
+            ProposedStartUtc = proposedStart,
+            ProposedEndUtc = proposedEnd,
+            SlaDeadlineUtc = slaDeadline,
+            SlaBreached = !finalValidation.IsSlaCompliant,
+            ConflictDetected = hasBookingConflict,
+            OutsideBusinessHours = !finalValidation.IsWithinBusinessHours,
+            TechnicianUnavailable = !finalValidation.IsWithinTechnicianAvailability,
+            NoSlotFound = noSlotFound,
+            AlternativeSlotFound = slotFound && !noSlotFound && hasBookingConflict,
+            AutoScheduled = !requiresApproval,
+            HeldSlotIsUsable = noSlotFound && finalValidation.IsValid
+        });
 
         var checklist = new ValidationChecklistDto
         {
@@ -469,7 +557,6 @@ public class SchedulingService : ISchedulingService
             SchemaValid = true
         };
 
-        var requiresApproval = conflictDetected || isHighImpactPriority;
         var finalStatus = requiresApproval
             ? WorkOrderStatus.PendingManagerApproval
             : WorkOrderStatus.Scheduled;
@@ -537,13 +624,15 @@ public class SchedulingService : ISchedulingService
             PreviousStatus = WorkOrderStatus.Draft,
             NewStatus = finalStatus,
             ChangedById = requesterUserId,
-            Reason = requiresApproval
-                ? (conflictDetected && isHighImpactPriority
-                    ? $"AI Scheduling Agent detected conflict and {workOrderPriority.ToString().ToLower()} priority requires approval. Schedule proposal awaiting Manager sign-off."
-                    : conflictDetected
-                        ? "AI Scheduling Agent detected schedule conflict. Proposal awaiting Manager sign-off."
-                        : $"AI Scheduling Agent flagged {workOrderPriority.ToString().ToLower()} priority for Manager approval.")
-                : "AI Scheduling Agent created conflict-free schedule."
+            Reason = !requiresApproval
+                ? "Conflict-free slot selected and the work order was scheduled."
+                : noSlotFound
+                    ? "No conflict-free slot could be found within the standard operating window. Manager review is required to schedule the work."
+                    : !finalValidation.IsSlaCompliant
+                        ? "Proposed schedule completes after the SLA deadline. Manager review is required before scheduling."
+                        : isHighImpactPriority
+                            ? $"{workOrderPriority} priority requires Manager approval before scheduling."
+                            : "Schedule proposal awaiting Manager sign-off."
         };
         await _context.Set<WorkOrderStatusHistory>().AddAsync(statusHistory);
 

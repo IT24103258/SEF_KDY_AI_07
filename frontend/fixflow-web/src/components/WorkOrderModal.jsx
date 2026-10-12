@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, Button, Input } from './SharedUI';
 import { workOrderApi } from '../services/workOrderApi';
-import { X, Calendar, Clock, AlertTriangle, CheckCircle2, FileText, MapPin, User, Tag, Shield } from 'lucide-react';
+import { X, Clock, AlertTriangle, CheckCircle2, FileText, MapPin, User, Tag, Shield } from 'lucide-react';
 
 const JOB_TITLES = [
   'Electrical Repair',
@@ -44,10 +44,10 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
   const [selectedRequestObj, setSelectedRequestObj] = useState(null);
 
   const [loading, setLoading] = useState(false);
+  const savingRef = useRef(false);
   const [error, setError] = useState(null);
   const [assignedTechnician, setAssignedTechnician] = useState(null);
   const [loadingAssignment, setLoadingAssignment] = useState(false);
-  const [infoMessage, setInfoMessage] = useState(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -55,7 +55,6 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
     loadDropdowns();
     setAssignedTechnician(null);
     setLoadingAssignment(false);
-    setInfoMessage(null);
 
     if (workOrder) {
       (async () => {
@@ -136,7 +135,6 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
     setError(null);
     setAssignedTechnician(null);
     setLoadingAssignment(false);
-    setInfoMessage(null);
   };
 
   const loadDropdowns = async () => {
@@ -174,7 +172,6 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
     const found = requests.find(r => r.id === selectedId);
     setSelectedRequestObj(found || null);
     setAssignedTechnician(null);
-    setInfoMessage(null);
 
     if (found) {
       if (found.locationId) {
@@ -221,8 +218,8 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (savingRef.current) return;
     setError(null);
-    setInfoMessage(null);
 
     if (!isEditing && (!requestId || requestId.trim() === '')) {
       setError('Please select an existing Maintenance Request.');
@@ -254,6 +251,7 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
     }
 
     setLoading(true);
+    savingRef.current = true;
 
     try {
       const payload = {
@@ -268,15 +266,10 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
         estimatedDurationMinutes: Math.max(1, parseInt(estimatedDurationMinutes, 10) || 60)
       };
 
-      let result;
       if (isEditing) {
-        result = await workOrderApi.updateWorkOrder(workOrder.id, payload);
+        await workOrderApi.updateWorkOrder(workOrder.id, payload);
       } else {
-        result = await workOrderApi.createWorkOrder(payload);
-      }
-
-      if (result?.data?.aiDecisionSummary && result?.data?.status === 'PendingManagerApproval') {
-        setInfoMessage(result.data.aiDecisionSummary);
+        await workOrderApi.createWorkOrder(payload);
       }
 
       if (onSaved) {
@@ -286,6 +279,7 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
     } catch (err) {
       setError(err.message || 'Failed to save work order.');
     } finally {
+      savingRef.current = false;
       setLoading(false);
     }
   };
@@ -349,25 +343,6 @@ export const WorkOrderModal = ({ isOpen, onClose, onSaved, workOrder = null }) =
           >
             <AlertTriangle size={16} />
             <span>{error}</span>
-          </div>
-        )}
-
-        {infoMessage && (
-          <div
-            style={{
-              padding: '0.75rem 1rem',
-              backgroundColor: 'rgba(59, 130, 246, 0.12)',
-              color: 'var(--primary-color)',
-              borderRadius: '8px',
-              marginBottom: '1rem',
-              fontSize: '0.85rem',
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '8px'
-            }}
-          >
-            <Calendar size={16} style={{ marginTop: '2px', flexShrink: 0 }} />
-            <span>{infoMessage}</span>
           </div>
         )}
 

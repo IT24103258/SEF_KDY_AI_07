@@ -856,10 +856,22 @@ class SchedulingAgent(BaseAgent):
             missing.append("preferred_end_time or proposed_end_time")
 
         if missing:
+            friendly_labels = {
+                "request_id": "request identifier",
+                "assigned_technician_id or technician_id": "assigned technician",
+                "estimated_duration_minutes": "estimated duration",
+                "sla_deadline": "SLA deadline",
+                "preferred_start_time or proposed_start_time": "start time",
+                "preferred_end_time or proposed_end_time": "end time",
+            }
+            missing_labels = [friendly_labels.get(m, m) for m in missing]
             error_output = {
                 "error": "MISSING_REQUIRED_INPUTS",
                 "missing_fields": missing,
-                "decision_summary": f"SchedulingAgent cannot proceed: missing required inputs: {', '.join(missing)}",
+                "decision_summary": (
+                    "Scheduling cannot proceed because required schedule details are missing: "
+                    f"{', '.join(missing_labels)}. The request has been flagged for manual scheduling review."
+                ),
             }
             return StepExecutionResult(
                 agent_name=self.name,
@@ -1015,15 +1027,20 @@ class SchedulingAgent(BaseAgent):
         tool_logs.append(t4)
 
         if conflict_detected:
-            decision_summary = f"Schedule conflict detected: {', '.join(conflict_details)}. Manager resolution required."
+            conflict_text = "; ".join(str(c) for c in conflict_details)
+            decision_summary = (
+                "The proposed time overlaps an existing booking for the assigned technician"
+                + (f" ({conflict_text})" if conflict_text else "")
+                + ". Manager review is required to confirm an alternative time."
+            )
         elif not within_bh:
-            decision_summary = "Proposed schedule falls outside operational business hours. Manager review required."
+            decision_summary = "The proposed time falls outside operating hours. Manager review is required to confirm a valid operational slot."
         elif not is_tech_available:
-            decision_summary = "Technician unavailable for the proposed slot. Alternative dispatch required."
+            decision_summary = "The assigned technician is not available for the proposed time. Manager review is required to confirm an alternative slot."
         elif not sla_compliant:
-            decision_summary = f"Proposed schedule completes after SLA deadline ({sla_deadline}). Expedited resolution required."
+            decision_summary = f"The proposed schedule completes after the SLA deadline ({sla_deadline}). Manager review is required to confirm the schedule or arrange expedited completion."
         else:
-            decision_summary = "Selected an available technician slot within business hours and before the SLA deadline. Existing bookings were checked and no overlapping booking was detected."
+            decision_summary = "A conflict-free slot within operating hours was selected and the schedule completes before the SLA deadline. The proposal awaits Manager confirmation."
 
         output = {
             "request_id": req_id,

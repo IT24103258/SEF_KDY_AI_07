@@ -176,8 +176,8 @@ public class PythonSchedulingAgentClient : IPythonSchedulingAgentClient
                     var toolCall = new PythonAgentToolCallDto
                     {
                         ToolName = tc.TryGetProperty("tool_name", out var tn) ? tn.GetString() ?? "" : "",
-                        InputParams = tc.TryGetProperty("input_params", out var ip) ? ip : null,
-                        OutputParams = tc.TryGetProperty("output_params", out var op) ? op : null,
+                        InputParams = tc.TryGetProperty("input_params", out var ip) ? ip.Clone() : null,
+                        OutputParams = tc.TryGetProperty("output_params", out var op) ? op.Clone() : null,
                         ExecutionTimeMs = tc.TryGetProperty("execution_time_ms", out var et) ? et.GetInt32() : 0,
                         Success = !tc.TryGetProperty("success", out var s) || s.GetBoolean(),
                         ErrorMessage = tc.TryGetProperty("error_message", out var em) ? em.GetString() : null

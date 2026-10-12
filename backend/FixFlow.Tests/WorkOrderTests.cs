@@ -991,8 +991,12 @@ public class WorkOrderTests
 
         Assert.Equal("PendingManagerApproval", result.Status);
         Assert.False(result.ConflictDetected);
-        Assert.Contains("Python Scheduling Agent", result.AiDecisionSummary);
-        Assert.Contains("high", result.AiDecisionSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("High priority work order", result.AiDecisionSummary);
+        Assert.Contains("awaits Manager approval", result.AiDecisionSummary);
+        Assert.DoesNotContain("Python", result.AiDecisionSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("deterministic", result.AiDecisionSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fallback", result.AiDecisionSummary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("scheduled", result.AiDecisionSummary, StringComparison.OrdinalIgnoreCase);
 
         var workflow = await ctx.AgentWorkflows
             .Include(w => w.ApprovalActions)
@@ -1675,6 +1679,553 @@ public class WorkOrderTests
 
         await Assert.ThrowsAsync<NotFoundException>(() =>
             woService.UpdateWorkOrderAsync(Guid.NewGuid(), updateDto, manager.Id));
+    }
+
+    [Fact]
+    public void PythonAgentToolCallDto_ShouldRetainJsonAfterDocumentDisposed()
+    {
+        JsonElement? capturedInput;
+        JsonElement? capturedOutput;
+
+        using (var doc = JsonDocument.Parse("{\"test\": \"data\", \"number\": 42}"))
+        {
+            var element = doc.RootElement;
+            capturedInput = element.Clone();
+        }
+
+        using (var doc2 = JsonDocument.Parse("{\"result\": \"success\"}"))
+        {
+            var element = doc2.RootElement;
+            capturedOutput = element.Clone();
+        }
+
+        var toolCall = new PythonAgentToolCallDto
+        {
+            ToolName = "test_tool",
+            InputParams = capturedInput,
+            OutputParams = capturedOutput,
+            ExecutionTimeMs = 100,
+            Success = true
+        };
+
+        var inputText = toolCall.InputParams?.GetRawText();
+        var outputText = toolCall.OutputParams?.GetRawText();
+
+        Assert.NotNull(inputText);
+        Assert.NotNull(outputText);
+        Assert.Contains("test", inputText);
+        Assert.Contains("data", inputText);
+        Assert.Contains("42", inputText);
+        Assert.Contains("result", outputText);
+        Assert.Contains("success", outputText);
+    }
+
+    [Fact]
+    public async Task CreateWorkOrderAsync_ShouldPersistMultipleToolCallsInSingleStep()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var mockPythonClient = new Mock<IPythonSchedulingAgentClient>();
+
+        var targetDate = GetNextWeekdayUtc();
+        var proposedStart = targetDate.AddHours(5);
+        var proposedEnd = targetDate.AddHours(7);
+
+        var pythonResult = new PythonSchedulingResult
+        {
+            Success = true,
+            Status = "SUCCESS",
+            ValidationPassed = true,
+            ToolCallCount = 3,
+            ExecutionMode = "llm_assisted",
+            LlmUsed = true,
+            ToolCalls = new List<PythonAgentToolCallDto>
+            {
+                new PythonAgentToolCallDto
+                {
+                    ToolName = "tool_1",
+                    InputParams = JsonDocument.Parse("{\"param1\": \"value1\"}").RootElement.Clone(),
+                    OutputParams = JsonDocument.Parse("{\"output1\": \"result1\"}").RootElement.Clone(),
+                    ExecutionTimeMs = 10,
+                    Success = true
+                },
+                new PythonAgentToolCallDto
+                {
+                    ToolName = "tool_2",
+                    InputParams = JsonDocument.Parse("{\"param2\": \"value2\"}").RootElement.Clone(),
+                    OutputParams = JsonDocument.Parse("{\"output2\": \"result2\"}").RootElement.Clone(),
+                    ExecutionTimeMs = 20,
+                    Success = false,
+                    ErrorMessage = "Tool 2 failed"
+                },
+                new PythonAgentToolCallDto
+                {
+                    ToolName = "tool_3",
+                    InputParams = JsonDocument.Parse("{\"param3\": \"value3\"}").RootElement.Clone(),
+                    OutputParams = JsonDocument.Parse("{\"output3\": \"result3\"}").RootElement.Clone(),
+                    ExecutionTimeMs = 30,
+                    Success = true
+                }
+            }
+        };
+
+        mockPythonClient.Setup(x => x.ExecuteSchedulingAgentAsync(
+            It.IsAny<SchedulingAgentInvocation>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(pythonResult);
+
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object, mockPythonClient.Object);
+        var woService = new WorkOrderService(ctx, schedService, mockAudit.Object, mockNotify.Object, pythonAgentClient: mockPythonClient.Object);
+
+        var createDto = new WorkOrderCreateDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Title = "Test Multiple Tool Calls",
+            Description = "Testing multiple tool calls in one step",
+            Priority = "High",
+            EstimatedDurationMinutes = 120,
+            ScheduledStartTime = proposedStart,
+            ScheduledEndTime = proposedEnd
+        };
+
+        var result = await woService.CreateWorkOrderAsync(createDto, manager.Id);
+
+        Assert.NotNull(result);
+
+        var agentWorkflow = await ctx.Set<AgentWorkflow>().Include(wf => wf.Steps).ThenInclude(s => s.ToolCalls).FirstOrDefaultAsync(wf => wf.RequestId == request.Id);
+        Assert.NotNull(agentWorkflow);
+
+        var schedulingStep = agentWorkflow.Steps.FirstOrDefault(s => s.AgentName == "SchedulingAgent");
+        Assert.NotNull(schedulingStep);
+        Assert.Equal(3, schedulingStep.ToolCalls.Count);
+
+        var toolCalls = schedulingStep.ToolCalls.OrderBy(tc => tc.ExecutionTimeMs).ToList();
+        Assert.Equal("tool_1", toolCalls[0].ToolName);
+        Assert.Contains("value1", toolCalls[0].InputJson);
+        Assert.Contains("result1", toolCalls[0].OutputJson);
+        Assert.True(toolCalls[0].Success);
+        Assert.Null(toolCalls[0].ErrorMessage);
+
+        Assert.Equal("tool_2", toolCalls[1].ToolName);
+        Assert.Contains("value2", toolCalls[1].InputJson);
+        Assert.Contains("result2", toolCalls[1].OutputJson);
+        Assert.False(toolCalls[1].Success);
+        Assert.Equal("Tool 2 failed", toolCalls[1].ErrorMessage);
+
+        Assert.Equal("tool_3", toolCalls[2].ToolName);
+        Assert.Contains("value3", toolCalls[2].InputJson);
+        Assert.Contains("result3", toolCalls[2].OutputJson);
+        Assert.True(toolCalls[2].Success);
+    }
+
+    // ============================================================
+    // DECISION SUMMARY OUTCOME COVERAGE
+    // Summaries must explain the real scheduling reason in business
+    // language, name the technician/slot, never leak implementation
+    // details, and never claim success while approval is pending.
+    // ============================================================
+
+    private static void AssertBusinessLanguage(string? summary)
+    {
+        Assert.False(string.IsNullOrWhiteSpace(summary));
+        Assert.DoesNotContain("Python", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("deterministic", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("fallback", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("agent", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("invoked", summary, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("C#", summary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DecisionSummary_MediumCleanSlot_ShouldNameTechnicianSlotAndSla()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+        var woService = new WorkOrderService(ctx, schedService, mockAudit.Object, mockNotify.Object);
+
+        var targetDateLocal = GetNextWeekdayLocal();
+
+        var createDto = new WorkOrderCreateDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Title = "Clean Slot Summary",
+            Description = "Medium priority valid slot should auto-schedule with a clear summary",
+            Priority = "Medium",
+            ScheduledStartTime = targetDateLocal.AddHours(10),
+            ScheduledEndTime = targetDateLocal.AddHours(11),
+            EstimatedDurationMinutes = 60,
+            SLADeadline = targetDateLocal.AddDays(5)
+        };
+
+        var result = await woService.CreateWorkOrderAsync(createDto, manager.Id);
+
+        Assert.Equal("Scheduled", result.Status);
+        AssertBusinessLanguage(result.AiDecisionSummary);
+        Assert.Contains("Tech User", result.AiDecisionSummary);
+        Assert.Contains("is scheduled on", result.AiDecisionSummary);
+        Assert.Contains("The work is scheduled to finish before the SLA deadline", result.AiDecisionSummary);
+        Assert.DoesNotContain("Manager approval", result.AiDecisionSummary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DecisionSummary_HighPriorityCleanSlot_ShouldAwaitApprovalWithoutClaimingScheduled()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+        var woService = new WorkOrderService(ctx, schedService, mockAudit.Object, mockNotify.Object);
+
+        var targetDateLocal = GetNextWeekdayLocal();
+
+        var createDto = new WorkOrderCreateDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Title = "High Priority Summary",
+            Description = "High priority clean slot still requires manager approval",
+            Priority = "High",
+            ScheduledStartTime = targetDateLocal.AddHours(10),
+            ScheduledEndTime = targetDateLocal.AddHours(11),
+            EstimatedDurationMinutes = 60,
+            SLADeadline = targetDateLocal.AddDays(5)
+        };
+
+        var result = await woService.CreateWorkOrderAsync(createDto, manager.Id);
+
+        Assert.Equal("PendingManagerApproval", result.Status);
+        AssertBusinessLanguage(result.AiDecisionSummary);
+        Assert.Contains("High priority work order for technician Tech User", result.AiDecisionSummary);
+        Assert.Contains("awaits Manager approval", result.AiDecisionSummary);
+        Assert.DoesNotContain("is scheduled", result.AiDecisionSummary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DecisionSummary_ConflictWithAlternativeSlot_ShouldExplainConflictAndProposal()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+        var woService = new WorkOrderService(ctx, schedService, mockAudit.Object, mockNotify.Object);
+
+        var targetDate = GetNextWeekdayUtc();
+
+        await ctx.Set<WorkOrder>().AddAsync(new WorkOrder
+        {
+            WorkOrderNumber = "WO-SUMMARY-CONFLICT",
+            Title = "Existing Booking",
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Status = WorkOrderStatus.Scheduled,
+            ScheduledStartTime = targetDate.AddHours(10),
+            ScheduledEndTime = targetDate.AddHours(12),
+            EstimatedDurationMinutes = 120
+        });
+        await ctx.SaveChangesAsync();
+
+        var createDto = new WorkOrderCreateDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Title = "Conflict Summary",
+            Description = "Conflicting request should produce a conflict explanation",
+            Priority = "Medium",
+            ScheduledStartTime = targetDate.AddHours(11),
+            ScheduledEndTime = targetDate.AddHours(13),
+            EstimatedDurationMinutes = 120,
+            SLADeadline = targetDate.AddDays(5)
+        };
+
+        var result = await woService.CreateWorkOrderAsync(createDto, manager.Id);
+
+        Assert.Equal("PendingManagerApproval", result.Status);
+        Assert.True(result.ConflictDetected);
+        AssertBusinessLanguage(result.AiDecisionSummary);
+        Assert.Contains("overlaps an existing booking", result.AiDecisionSummary);
+        Assert.Contains("Tech User", result.AiDecisionSummary);
+        Assert.Contains("alternative conflict-free slot", result.AiDecisionSummary);
+        Assert.Contains("awaits Manager approval", result.AiDecisionSummary);
+        Assert.DoesNotContain("is scheduled", result.AiDecisionSummary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DecisionSummary_ConflictWithNoAlternative_ShouldRequestManualManagerScheduling()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+        var woService = new WorkOrderService(ctx, schedService, mockAudit.Object, mockNotify.Object);
+
+        var targetDate = GetNextWeekdayUtc();
+
+        // One booking wide enough to block every candidate slot in the 7-day search window
+        await ctx.Set<WorkOrder>().AddAsync(new WorkOrder
+        {
+            WorkOrderNumber = "WO-SUMMARY-BLOCK-ALL",
+            Title = "Window Wide Block",
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Status = WorkOrderStatus.Scheduled,
+            ScheduledStartTime = targetDate.AddDays(-1),
+            ScheduledEndTime = targetDate.AddDays(8),
+            EstimatedDurationMinutes = 60
+        });
+        await ctx.SaveChangesAsync();
+
+        var createDto = new WorkOrderCreateDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Title = "No Alternative Summary",
+            Description = "Fully blocked window should request manual manager scheduling",
+            Priority = "Medium",
+            ScheduledStartTime = targetDate.AddHours(11),
+            ScheduledEndTime = targetDate.AddHours(12),
+            EstimatedDurationMinutes = 60,
+            SLADeadline = targetDate.AddDays(5)
+        };
+
+        var result = await woService.CreateWorkOrderAsync(createDto, manager.Id);
+
+        Assert.Equal("PendingManagerApproval", result.Status);
+        Assert.True(result.ConflictDetected);
+        AssertBusinessLanguage(result.AiDecisionSummary);
+        Assert.Contains("no conflict-free slot could be found", result.AiDecisionSummary);
+        Assert.Contains("Tech User", result.AiDecisionSummary);
+        Assert.Contains("Manager review is required to schedule the work manually", result.AiDecisionSummary);
+        Assert.Contains("No conflict-free slot found within standard operating window", result.ConflictDetailsJson);
+    }
+
+    [Fact]
+    public async Task DecisionSummary_OutsideBusinessHours_ShouldProposeNextOperationalSlot()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+        var woService = new WorkOrderService(ctx, schedService, mockAudit.Object, mockNotify.Object);
+
+        var targetDateLocal = GetNextWeekdayLocal();
+
+        var createDto = new WorkOrderCreateDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Title = "After Hours Summary",
+            Description = "Request outside operating hours should explain the restriction",
+            Priority = "Medium",
+            ScheduledStartTime = targetDateLocal.AddHours(20),
+            ScheduledEndTime = targetDateLocal.AddHours(21),
+            EstimatedDurationMinutes = 60,
+            SLADeadline = targetDateLocal.AddDays(5)
+        };
+
+        var result = await woService.CreateWorkOrderAsync(createDto, manager.Id);
+
+        Assert.Equal("PendingManagerApproval", result.Status);
+        AssertBusinessLanguage(result.AiDecisionSummary);
+        Assert.Contains("falls outside operating hours", result.AiDecisionSummary);
+        Assert.Contains("Tech User", result.AiDecisionSummary);
+        Assert.Contains("next valid operational slot", result.AiDecisionSummary);
+        Assert.Contains("awaits Manager approval", result.AiDecisionSummary);
+        Assert.DoesNotContain("is scheduled", result.AiDecisionSummary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DecisionSummary_TechnicianUnavailable_ShouldRequestManualScheduling()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        tech.IsAvailable = false;
+        await ctx.SaveChangesAsync();
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+        var woService = new WorkOrderService(ctx, schedService, mockAudit.Object, mockNotify.Object);
+
+        var targetDateLocal = GetNextWeekdayLocal();
+
+        var createDto = new WorkOrderCreateDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Title = "Unavailable Technician Summary",
+            Description = "Unavailable technician should produce an availability explanation",
+            Priority = "Medium",
+            ScheduledStartTime = targetDateLocal.AddHours(10),
+            ScheduledEndTime = targetDateLocal.AddHours(11),
+            EstimatedDurationMinutes = 60,
+            SLADeadline = targetDateLocal.AddDays(5)
+        };
+
+        var result = await woService.CreateWorkOrderAsync(createDto, manager.Id);
+
+        Assert.Equal("PendingManagerApproval", result.Status);
+        AssertBusinessLanguage(result.AiDecisionSummary);
+        Assert.Contains("Tech User", result.AiDecisionSummary);
+        Assert.Contains("is unavailable", result.AiDecisionSummary);
+        Assert.Contains("no valid slot was found", result.AiDecisionSummary);
+        Assert.Contains("Manager review is required", result.AiDecisionSummary);
+        Assert.DoesNotContain("is scheduled", result.AiDecisionSummary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task DecisionSummary_SlaBreach_ShouldRequireApprovalForExpeditedCompletion()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+        var woService = new WorkOrderService(ctx, schedService, mockAudit.Object, mockNotify.Object);
+
+        var targetDateLocal = GetNextWeekdayLocal();
+
+        var createDto = new WorkOrderCreateDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Title = "SLA Breach Summary",
+            Description = "Slot ending after the SLA deadline should explain the breach",
+            Priority = "Medium",
+            ScheduledStartTime = targetDateLocal.AddHours(10),
+            ScheduledEndTime = targetDateLocal.AddHours(11),
+            EstimatedDurationMinutes = 60,
+            SLADeadline = targetDateLocal.AddHours(9)
+        };
+
+        var result = await woService.CreateWorkOrderAsync(createDto, manager.Id);
+
+        Assert.Equal("PendingManagerApproval", result.Status);
+        AssertBusinessLanguage(result.AiDecisionSummary);
+        Assert.Contains("Tech User", result.AiDecisionSummary);
+        Assert.Contains("completes after the SLA deadline", result.AiDecisionSummary);
+        Assert.Contains("Manager approval is required", result.AiDecisionSummary);
+        Assert.Contains("expedited completion", result.AiDecisionSummary);
+        Assert.DoesNotContain("is scheduled", result.AiDecisionSummary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SchedulingService_CleanLowSlot_ShouldProduceScheduledSummaryWithTechnicianName()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+
+        var reqDto = new ScheduleRequestDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Priority = "Low",
+            EstimatedDurationMinutes = 60,
+            PreferredStartTime = GetNextWeekdayUtc().AddHours(10)
+        };
+
+        var proposal = await schedService.CreateConflictFreeWorkOrderAsync(reqDto, requester.Id);
+
+        var wo = await ctx.Set<WorkOrder>().FirstAsync(w => w.Id == proposal.WorkOrderId);
+        Assert.Equal(WorkOrderStatus.Scheduled, wo.Status);
+        AssertBusinessLanguage(wo.AiDecisionSummary);
+        Assert.Contains("Tech User", wo.AiDecisionSummary);
+        Assert.Contains("is scheduled on", wo.AiDecisionSummary);
+        Assert.Contains("The work is scheduled to finish before the SLA deadline", wo.AiDecisionSummary);
+    }
+
+    [Fact]
+    public async Task SchedulingService_HighPriorityCleanSlot_ShouldAwaitManagerApproval()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+
+        var reqDto = new ScheduleRequestDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Priority = "High",
+            EstimatedDurationMinutes = 60,
+            PreferredStartTime = GetNextWeekdayUtc().AddHours(10)
+        };
+
+        var proposal = await schedService.CreateConflictFreeWorkOrderAsync(reqDto, requester.Id);
+
+        var wo = await ctx.Set<WorkOrder>().FirstAsync(w => w.Id == proposal.WorkOrderId);
+        Assert.Equal(WorkOrderStatus.PendingManagerApproval, wo.Status);
+        AssertBusinessLanguage(wo.AiDecisionSummary);
+        Assert.Contains("High priority work order for technician Tech User", wo.AiDecisionSummary);
+        Assert.Contains("awaits Manager approval", wo.AiDecisionSummary);
+        Assert.DoesNotContain("is scheduled", wo.AiDecisionSummary, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task SchedulingService_NoSlotFound_ShouldRequestManualScheduling()
+    {
+        using var context = CreateInMemoryDbContext();
+        var (ctx, tech, request, manager, requester) = await SeedBasicTestData(context);
+
+        var mockAudit = new Mock<IAuditLogService>();
+        var mockNotify = new Mock<INotificationService>();
+        var schedService = new SchedulingService(ctx, mockAudit.Object, mockNotify.Object);
+
+        var targetDate = GetNextWeekdayUtc();
+
+        await ctx.Set<WorkOrder>().AddAsync(new WorkOrder
+        {
+            WorkOrderNumber = "WO-SCHED-BLOCK-ALL",
+            Title = "Window Wide Block",
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Status = WorkOrderStatus.Scheduled,
+            ScheduledStartTime = targetDate.AddDays(-1),
+            ScheduledEndTime = targetDate.AddDays(8),
+            EstimatedDurationMinutes = 60
+        });
+        await ctx.SaveChangesAsync();
+
+        var reqDto = new ScheduleRequestDto
+        {
+            RequestId = request.Id,
+            TechnicianId = tech.Id,
+            Priority = "Low",
+            EstimatedDurationMinutes = 60,
+            PreferredStartTime = targetDate.AddHours(10)
+        };
+
+        var proposal = await schedService.CreateConflictFreeWorkOrderAsync(reqDto, requester.Id);
+
+        var wo = await ctx.Set<WorkOrder>().FirstAsync(w => w.Id == proposal.WorkOrderId);
+        Assert.Equal(WorkOrderStatus.PendingManagerApproval, wo.Status);
+        AssertBusinessLanguage(wo.AiDecisionSummary);
+        Assert.Contains("Tech User", wo.AiDecisionSummary);
+        Assert.Contains("overlaps an existing booking and no conflict-free slot could be found", wo.AiDecisionSummary);
+        Assert.Contains("Manager review is required to schedule the work manually", wo.AiDecisionSummary);
     }
 
 }

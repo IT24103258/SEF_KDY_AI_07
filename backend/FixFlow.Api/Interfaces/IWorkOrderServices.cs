@@ -48,6 +48,13 @@ public interface ISchedulingService
         string priority,
         DateTime? slaDeadline = null,
         Guid? excludeWorkOrderId = null);
+    Task<SlotSearchResult> FindFirstAvailableSlotAsync(
+        Guid technicianId,
+        DateTime anchorStartUtc,
+        int durationMinutes,
+        string priority,
+        DateTime? slaDeadlineUtc,
+        int maxSearchDays = 7);
     Task<List<CalendarEventDto>> GetCalendarEventsAsync(
         DateTime? startDate = null,
         DateTime? endDate = null,
@@ -56,6 +63,13 @@ public interface ISchedulingService
         string? status = null);
     Task<SchedulingReportDto> GetSchedulingReportsAsync(DateTime? startDate = null, DateTime? endDate = null);
     Task<List<BusinessHoursDto>> GetBusinessHoursAsync();
+}
+
+public class SlotSearchResult
+{
+    public bool Found { get; set; }
+    public DateTime ProposedStartUtc { get; set; }
+    public DateTime ProposedEndUtc { get; set; }
 }
 
 public class BusinessHoursDto

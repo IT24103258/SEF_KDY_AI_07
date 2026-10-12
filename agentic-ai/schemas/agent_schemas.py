@@ -64,6 +64,6 @@ class ScheduleProposal(BaseModel):
     within_technician_availability: bool = True
     sla_compliant: bool = True
     proposal_status: str = "Proposed"
-    decision_summary: str = "Selected an available technician slot within business hours and before the SLA deadline."
+    decision_summary: str = "A conflict-free slot within operating hours was selected and the proposal awaits Manager confirmation."
     validation_required: bool = True
     is_conflict_free: bool = True

@@ -104,8 +104,10 @@ class TestAgentDeterministicFallbackProvenance:
         assert res.output_data["llm_used"] is False
         assert res.output_data["llm_fallback"] is True
         assert res.output_data["scheduling_path"] == "deterministic_fallback"
-        # The workflow still completes deterministically and stays pending manager approval.
-        assert res.status == "REQUIRES_HUMAN_APPROVAL"
+        # A clean, conflict-free, in-hours, non-Critical proposal completes
+        # deterministically (matches test_scheduling_agent.py and the C# engine);
+        # approval is only required for conflicts, outside-hours, or Critical.
+        assert res.status == "SUCCESS"
         assert res.output_data["proposal_status"] == "Proposed"
         assert res.output_data["validation_required"] is True
         assert res.validation_passed is True
@@ -130,8 +132,9 @@ class TestAgentDeterministicFallbackProvenance:
         assert res.output_data["llm_used"] is True
         assert res.output_data["llm_fallback"] is False
         assert res.output_data["scheduling_path"] == "llm_assisted"
-        # Even on the LLM path the proposal stays pending manager approval.
-        assert res.status == "REQUIRES_HUMAN_APPROVAL"
+        # LLM only interprets preferences; the deterministic validator decides
+        # approval, and a clean non-Critical proposal does not require it.
+        assert res.status == "SUCCESS"
         assert res.output_data["validation_required"] is True
 
 

@@ -201,7 +201,7 @@ def execute_workflow(request: WorkflowExecutionRequest):
 
         if step4_result.status == "REQUIRES_HUMAN_APPROVAL":
             requires_approval = True
-            approval_reason = "Member 4 Scheduling Agent requires manager approval for schedule proposal."
+            approval_reason = "The schedule proposal requires manager approval before it can be confirmed."
 
     # The workflow result is derived only from the agents this workflow type
     # actually executed, so an unrelated agent can never affect it.
