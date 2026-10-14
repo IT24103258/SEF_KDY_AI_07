@@ -174,6 +174,18 @@ public class TechnicianService : ITechnicianService
             throw new KeyNotFoundException($"Maintenance request '{requestDto.RequestId}' was not found.");
         }
 
+        // Duplicate-assignment guard: a request that already has an "Assigned" record must
+        // not receive a new recommendation. Creating another "Recommended" row would shadow
+        // the existing assignment and make the request reappear in the matching list.
+        // InvalidOperationException is mapped to HTTP 422 by TechniciansController.
+        bool requestAlreadyAssigned = await _context.Set<Assignment>()
+            .AnyAsync(a => a.MaintenanceRequestId == request.Id && a.Status == "Assigned");
+        if (requestAlreadyAssigned)
+        {
+            throw new InvalidOperationException(
+                $"Maintenance request '{request.RequestNumber}' already has an assigned technician.");
+        }
+
         var technicians = await _context.Technicians
             .Include(t => t.User)
             .Include(t => t.Skills)
@@ -273,6 +285,19 @@ public class TechnicianService : ITechnicianService
         if (request == null)
         {
             throw new KeyNotFoundException($"Maintenance request '{requestId}' was not found.");
+        }
+
+        // Duplicate-assignment guard: a request that already has an "Assigned" record must
+        // not be assigned again. Repeated clicks or stale UI would otherwise overwrite the
+        // existing assignment (possibly with a different technician) and create additional
+        // "Assigned" rows for the same request, which show up as duplicate technician jobs.
+        // InvalidOperationException is mapped to HTTP 422 by TechniciansController.
+        bool requestAlreadyAssigned = await _context.Set<Assignment>()
+            .AnyAsync(a => a.MaintenanceRequestId == request.Id && a.Status == "Assigned");
+        if (requestAlreadyAssigned)
+        {
+            throw new InvalidOperationException(
+                $"Maintenance request '{request.RequestNumber}' already has an assigned technician.");
         }
 
         var tech = await _context.Technicians

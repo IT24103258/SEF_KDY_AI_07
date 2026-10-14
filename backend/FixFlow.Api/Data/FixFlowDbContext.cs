@@ -47,6 +47,7 @@ public class FixFlowDbContext : DbContext
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
     public DbSet<SLAConfiguration> SLAConfigurations => Set<SLAConfiguration>();
     public DbSet<RequestAttachment> RequestAttachments { get; set; }
+    public DbSet<Assignment> Assignments => Set<Assignment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
