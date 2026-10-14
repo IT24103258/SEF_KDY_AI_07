@@ -60,7 +60,7 @@ public class WorkOrderTests
 
         var request = new MaintenanceRequest
         {
-            RequestNumber = "REQ-2026-0001",
+            RequestNumber = "REQ-2026-9999",
             Title = "Ceiling Light Short Circuit",
             Description = "Bathroom light sparked and tripped breaker.",
             Status = RequestStatus.Matched,
