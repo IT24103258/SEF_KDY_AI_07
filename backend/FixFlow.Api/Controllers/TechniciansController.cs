@@ -187,30 +187,30 @@ public class TechniciansController : ControllerBase
 
     // 7. GET: api/technicians/all-assignments
     [HttpGet("all-assignments")]
-public async Task<IActionResult> GetAllAssignments()
-{
-    try
+    public async Task<IActionResult> GetAllAssignments()
     {
-        var assignments = await _context.Set<Assignment>()
-            .GroupBy(a => a.MaintenanceRequestId)
-            .Select(g => g.OrderByDescending(a => a.AssignedAt).FirstOrDefault())
-            .Where(a => a != null)
-            .Select(a => new 
-            {
-                requestId = a!.MaintenanceRequestId,
-                technicianId = a.TechnicianId,
-                assignmentStatus = a.Status ?? "Assigned",
-                assignedAt = a.AssignedAt
-            })
-            .ToListAsync();
+        try
+        {
+            var assignments = await _context.Set<Assignment>()
+                .GroupBy(a => a.MaintenanceRequestId)
+                .Select(g => g.OrderByDescending(a => a.AssignedAt).FirstOrDefault())
+                .Where(a => a != null)
+                .Select(a => new 
+                {
+                    requestId = a!.MaintenanceRequestId,
+                    technicianId = a.TechnicianId,
+                    assignmentStatus = a.Status ?? "Assigned",
+                    assignedAt = a.AssignedAt
+                })
+                .ToListAsync();
 
-        return Ok(assignments);
+            return Ok(assignments);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, new { message = $"Internal server error: {ex.Message}" });
+        }
     }
-    catch (Exception ex)
-    {
-        return StatusCode(500, new { message = $"Internal server error: {ex.Message}" });
-    }
-}
 }
 
 // The DTO class can be placed directly under the Controller or in a 'DTOs' folder.
