@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { UserCheck, Sparkles, CheckCircle } from 'lucide-react';
 import { api , technicianApi } from '../services/api';
+import { workOrderApi } from '../services/workOrderApi';
 
 // Priority ranking used to order the matching list: Critical → High → Medium → Low.
 // Requests without a Priority Agent output rank last.
