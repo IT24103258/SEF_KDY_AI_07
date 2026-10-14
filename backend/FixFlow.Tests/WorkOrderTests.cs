@@ -70,6 +70,7 @@ public class WorkOrderTests
         };
         await context.MaintenanceRequests.AddAsync(request);
 
+        /*
         var assignment = new Assignment
         {
             MaintenanceRequestId = request.Id,
@@ -80,6 +81,7 @@ public class WorkOrderTests
             AssignedAt = DateTime.UtcNow
         };
         await context.Set<Assignment>().AddAsync(assignment);
+        */
 
         // Seed SLA configurations with generous resolution times to account for non-business day test runs
         var slas = new List<SLAConfiguration>
