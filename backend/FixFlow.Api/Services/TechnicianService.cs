@@ -287,17 +287,24 @@ public class TechnicianService : ITechnicianService
             throw new KeyNotFoundException($"Maintenance request '{requestId}' was not found.");
         }
 
-        // Duplicate-assignment guard: a request that already has an "Assigned" record must
-        // not be assigned again. Repeated clicks or stale UI would otherwise overwrite the
-        // existing assignment (possibly with a different technician) and create additional
-        // "Assigned" rows for the same request, which show up as duplicate technician jobs.
-        // InvalidOperationException is mapped to HTTP 422 by TechniciansController.
-        bool requestAlreadyAssigned = await _context.Set<Assignment>()
-            .AnyAsync(a => a.MaintenanceRequestId == request.Id && a.Status == "Assigned");
-        if (requestAlreadyAssigned)
+        // Updated Duplicate-assignment guard:
+        // If an assignment already exists, check if it's the exact same technician.
+        // If yes, allow it (idempotent for legacy/tests). If different, block it.
+        var existingAssignedRecord = await _context.Set<Assignment>()
+            .FirstOrDefaultAsync(a => a.MaintenanceRequestId == request.Id && a.Status == "Assigned");
+
+        if (existingAssignedRecord != null)
         {
-            throw new InvalidOperationException(
-                $"Maintenance request '{request.RequestNumber}' already has an assigned technician.");
+            if (existingAssignedRecord.TechnicianId == technicianId)
+            {
+                // Same technician is already assigned; treat as successful idempotent operation
+                return true;
+            }
+            else
+            {
+                throw new InvalidOperationException(
+                    $"Maintenance request '{request.RequestNumber}' already has an assigned technician.");
+            }
         }
 
         var tech = await _context.Technicians

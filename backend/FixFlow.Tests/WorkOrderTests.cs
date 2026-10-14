@@ -60,7 +60,7 @@ public class WorkOrderTests
 
         var request = new MaintenanceRequest
         {
-            RequestNumber = "REQ-2026-9999",
+            RequestNumber = "REQ-2026-0001",
             Title = "Ceiling Light Short Circuit",
             Description = "Bathroom light sparked and tripped breaker.",
             Status = RequestStatus.Matched,
@@ -70,7 +70,6 @@ public class WorkOrderTests
         };
         await context.MaintenanceRequests.AddAsync(request);
 
-        /*
         var assignment = new Assignment
         {
             MaintenanceRequestId = request.Id,
@@ -81,7 +80,6 @@ public class WorkOrderTests
             AssignedAt = DateTime.UtcNow
         };
         await context.Set<Assignment>().AddAsync(assignment);
-        */
 
         // Seed SLA configurations with generous resolution times to account for non-business day test runs
         var slas = new List<SLAConfiguration>
